@@ -27,7 +27,7 @@ user_info = auth.get_logged_user()
 # ==============================================================================
 user_teams_res = (
     supabase.table("team_members")
-    .select("team_id, role, teams(id, name, invite_code)")
+    .select("team_id, role, teams(id, name, invite_code, owner_id)")
     .eq("user_id", user_info["id"])
     .execute()
 )
@@ -40,7 +40,7 @@ if user_teams_res.data:
             team_info["user_role"] = item["role"]
             user_teams.append(team_info)
 
-# Se o usuário não está vinculado a nenhuma equipe (exceto se for Master puro), exibe o onboarding
+# Se o usuário não está vinculado a nenhuma equipe (exceto Master), exibe onboarding
 if not user_teams and not is_master_user():
     auth.render_team_onboarding()
     st.stop()
@@ -66,9 +66,16 @@ if user_teams:
         user_teams[0],
     )
     user_info["team_id"] = active_team["id"]
-    user_info["role"] = active_team.get("user_role", "editor")
+    user_info["role"] = active_team.get("user_role", "leitor")
 else:
-    active_team = {"name": "Painel Master Global", "invite_code": "MASTER"}
+    active_team = {
+        "name": "Painel Master Global",
+        "invite_code": "MASTER",
+        "owner_id": None,
+    }
+
+# IDENTIFICA SE O USUÁRIO LOGADO É O DONO/CRIADOR DA EQUIPE ATIVA
+is_team_owner = active_team.get("owner_id") == user_info["id"]
 
 # ==============================================================================
 # 4. SIDEBAR (PERFIL, SELETOR DE EQUIPE, PROJETO E NAVEGAÇÃO)
@@ -80,9 +87,11 @@ with st.sidebar:
     st.caption(f"📧 {user_info.get('email', '')}")
 
     if is_master_user():
-        st.caption("👑 **Papel:** `MASTER`")
+        st.caption("👑 **Papel Global:** `MASTER`")
+    elif is_team_owner:
+        st.caption("👑 **Papel na Equipe:** `Dono / Administrador`")
     else:
-        st.caption(f"🛡️ **Papel:** `{user_info.get('role', 'editor')}`")
+        st.caption(f"🛡️ **Papel na Equipe:** `{user_info.get('role', 'leitor').title()}`")
 
     st.divider()
 
@@ -131,7 +140,7 @@ with st.sidebar:
                         if t_lookup.data:
                             found_t = t_lookup.data[0]
 
-                            # CORREÇÃO AQUI: Verifica a existência antes de inserir para evitar erro no Postgres
+                            # Verifica se já está vinculado para evitar duplicidade no banco
                             check_exists = (
                                 supabase.table("team_members")
                                 .select("id")
@@ -141,10 +150,11 @@ with st.sidebar:
                             )
 
                             if not check_exists.data:
+                                # Todo novo usuário vinculado entra por padrão como 'leitor'
                                 supabase.table("team_members").insert({
                                     "team_id": found_t["id"],
                                     "user_id": user_info["id"],
-                                    "role": "editor",
+                                    "role": "leitor",
                                 }).execute()
 
                             st.session_state["current_team_id"] = found_t["id"]
@@ -176,11 +186,10 @@ with st.sidebar:
         "📊 Métricas & Exportação",
     ]
 
-    # Adiciona aba de gestão de membros se for admin da equipe ativa
-    if user_info.get("role") == "admin" and not is_master_user():
+    # REGRA RESTRITA: APENAS o Criador/Dono da equipe ou Usuário Master vê o menu de Gestão de Equipe
+    if is_team_owner or is_master_user():
         page_options.append("👥 Gestão de Equipe")
 
-    # Adiciona a opção exclusiva do Painel Administrativo Master se for o usuário Master
     if is_master_user():
         page_options.append("👑 Painel Admin Master")
 
@@ -261,10 +270,21 @@ elif page == "📊 Métricas & Exportação":
     )
 
 elif page == "👥 Gestão de Equipe":
-    st.title("👥 Gestão de Membros da Equipe")
-    st.write(f"Gerencie permissões e membros da equipe **{active_team.get('name')}**.")
+    # TRAVA EXTRA DE SEGURANÇA NA ROTA
+    if not is_team_owner and not is_master_user():
+        st.error(
+            "🚫 **Acesso Negado:** Apenas o Administrador/Dono da equipe pode"
+            " gerenciar membros e permissões."
+        )
+        st.stop()
 
-    # 1. Busca os membros da equipe atual
+    st.title("👥 Gestão de Membros da Minha Equipe")
+    st.write(
+        "Gerencie permissões e acessos dos usuários vinculados à sua equipe"
+        f" **{active_team.get('name')}**."
+    )
+
+    # 1. Busca os membros vinculados à equipe do Dono
     members_res = (
         supabase.table("team_members")
         .select("role, users(id, name, email, created_at)")
@@ -277,71 +297,84 @@ elif page == "👥 Gestão de Equipe":
         for m in members_res.data:
             if m.get("users"):
                 u_data = m["users"]
-                u_data["role"] = m.get("role", "editor")
+                u_data["role"] = m.get("role", "leitor")
                 members.append(u_data)
 
     st.divider()
 
-    # Dicionário amigável de funções
+    # Mapeamento dos papéis permitidos para atribuição pelo Dono
     ROLE_LABELS = {
-        "admin": "Líder (Criar, Editar, Excluir, Gerenciar Time)",
+        "gestor": "Gestor (Criar, Editar e Excluir)",
         "editor": "Editor (Criar e Editar)",
-        "viewer": "Leitor (Apenas Visualizar)"
+        "leitor": "Leitor (Apenas Visualizar)",
     }
     ROLE_KEYS = list(ROLE_LABELS.keys())
 
-    # 2. Lista todos os membros em tabela/cards
+    # 2. Listagem de membros exclusiva para gestão do Dono
     for member in members:
-        cols = st.columns([3, 3, 2, 2])
-        
+        is_owner_user = member["id"] == active_team.get("owner_id")
+
+        cols = st.columns([3, 4, 2, 2])
+
         with cols[0]:
             st.write(f"**{member['name']}**")
             st.caption(f"📧 {member['email']}")
-        
-        with cols[1]:
-            is_self = (member["id"] == user_info["id"])
-            current_role = member["role"] if member["role"] in ROLE_KEYS else "editor"
-            current_role_index = ROLE_KEYS.index(current_role)
 
-            if is_self:
-                st.info(f"**Sua Função:** {ROLE_LABELS[current_role].split('(')[0]}")
+        with cols[1]:
+            if is_owner_user:
+                st.success("👑 **Dono / Administrador**")
             else:
-                # Dropdown para alterar permissão do membro
-                new_role_key = st.selectbox(
-                    "Permissão",
+                # Normaliza papéis antigos/legados
+                current_role = member["role"]
+                if current_role not in ROLE_KEYS:
+                    current_role = "leitor"
+
+                current_role_index = ROLE_KEYS.index(current_role)
+
+                # O Dono define o papel do usuário vinculado aqui
+                new_role = st.selectbox(
+                    "Papel na Equipe",
                     options=ROLE_KEYS,
                     format_func=lambda x: ROLE_LABELS[x],
                     index=current_role_index,
                     key=f"role_sel_{member['id']}",
-                    label_visibility="collapsed"
+                    label_visibility="collapsed",
                 )
 
-                if new_role_key != member["role"]:
-                    supabase.table("team_members") \
-                        .update({"role": new_role_key}) \
-                        .eq("team_id", active_team["id"]) \
-                        .eq("user_id", member["id"]) \
-                        .execute()
-                    st.success(f"Permissão de {member['name']} atualizada para {ROLE_LABELS[new_role_key].split('(')[0]}!")
+                if new_role != member["role"]:
+                    supabase.table("team_members").update(
+                        {"role": new_role}
+                    ).eq("team_id", active_team["id"]).eq(
+                        "user_id", member["id"]
+                    ).execute()
+                    st.success(
+                        f"Papel de {member['name']} atualizado para"
+                        f" {ROLE_LABELS[new_role].split('(')[0]}!"
+                    )
                     st.rerun()
 
         with cols[2]:
-            st.caption(f"Vinculado em:\n{member['created_at'][:10] if member.get('created_at') else 'N/A'}")
+            st.caption(
+                "Entrou em:\n"
+                f"{member['created_at'][:10] if member.get('created_at') else 'N/A'}"
+            )
 
         with cols[3]:
-            if not is_self:
-                # Botão para REMOVER O ACESSO do usuário à equipe
-                if st.button("🗑️ Revogar Acesso", key=f"rm_mem_{member['id']}", type="secondary"):
-                    supabase.table("team_members") \
-                        .delete() \
-                        .eq("team_id", active_team["id"]) \
-                        .eq("user_id", member["id"]) \
-                        .execute()
-                    st.success(f"Acesso de {member['name']} removido com sucesso!")
+            if not is_owner_user:
+                # O Dono pode excluir o acesso do usuário da equipe
+                if st.button(
+                    "🗑️ Removê-lo",
+                    key=f"rm_mem_{member['id']}",
+                    type="secondary",
+                ):
+                    supabase.table("team_members").delete().eq(
+                        "team_id", active_team["id"]
+                    ).eq("user_id", member["id"]).execute()
+                    st.success(f"{member['name']} foi removido da equipe.")
                     st.rerun()
             else:
-                st.caption("*(Sua conta)*")
-        
+                st.caption("*(Você)*")
+
         st.divider()
 
 elif page == "👑 Painel Admin Master":

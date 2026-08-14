@@ -9,7 +9,7 @@ TEST_TYPES = ["Funcional", "Regressão", "Smoke", "Não-Funcional"]
 
 def format_regression_title(original_title: str) -> str:
     """Garante que o prefixo [Regressão] apareça apenas uma vez, limpando acumulados."""
-    clean_title = re.sub(r'(\s*\[Regressão\]\s*)+', '', original_title).strip()
+    clean_title = re.sub(r'(\s*\[Regressão\]\s*)+', ' ', original_title, flags=re.IGNORECASE).strip()
     return f"[Regressão] {clean_title}"
 
 
@@ -35,8 +35,12 @@ def render_test_cases_tab(project_id: str):
     active_cycle = current_cycle.strip()
 
     with col_c2:
-        existing_cycles_res = supabase.table("test_cases").select("test_cycle").eq("project_id", project_id).execute()
-        cycles_list = sorted(list(set([row.get("test_cycle") for row in (existing_cycles_res.data or []) if row.get("test_cycle") and row.get("test_cycle").strip()])))
+        try:
+            existing_cycles_res = supabase.table("test_cases").select("test_cycle").eq("project_id", project_id).execute()
+            cycles_list = sorted(list(set([row.get("test_cycle") for row in (existing_cycles_res.data or []) if row.get("test_cycle") and row.get("test_cycle").strip()])))
+        except Exception as e:
+            cycles_list = []
+            st.error(f"Erro ao carregar ciclos de teste: {e}")
 
     with st.expander("🚀 Geração Inteligente de Suíte Completa via IA (Múltiplos Testes)", expanded=False):
         if not active_cycle:
@@ -55,6 +59,7 @@ def render_test_cases_tab(project_id: str):
                     
                     if data and isinstance(data, list):
                         sucesso_count = 0
+                        erros_count = 0
                         for item in data:
                             payload = {
                                 "project_id": project_id,
@@ -69,11 +74,14 @@ def render_test_cases_tab(project_id: str):
                             try:
                                 supabase.table("test_cases").insert(payload).execute()
                                 sucesso_count += 1
-                            except Exception:
-                                pass
+                            except Exception as db_err:
+                                erros_count += 1
+                                st.warning(f"Falha ao salvar o caso '{item.get('title')}': {db_err}")
                         
                         if sucesso_count > 0:
                             st.success(f"Suíte gerada com sucesso! {sucesso_count} casos de teste adicionados ao ciclo `{active_cycle}`.")
+                            if erros_count > 0:
+                                st.warning(f"{erros_count} itens falharam ao ser salvos.")
                             st.rerun()
                         else:
                             st.error("Houve um erro ao salvar os casos de teste gerados no Supabase.")
@@ -161,13 +169,17 @@ def render_test_cases_tab(project_id: str):
     with col_f2:
         filter_type = st.selectbox("Filtrar por Tipo:", ["Todos"] + TEST_TYPES, key="tc_filter_select")
     
-    query = supabase.table("test_cases").select("*").eq("project_id", project_id)
-    if filter_cycle != "Todos":
-        query = query.eq("test_cycle", filter_cycle)
-    if filter_type != "Todos":
-        query = query.eq("test_type", filter_type)
-    
-    test_cases = query.execute().data or []
+    try:
+        query = supabase.table("test_cases").select("*").eq("project_id", project_id)
+        if filter_cycle != "Todos":
+            query = query.eq("test_cycle", filter_cycle)
+        if filter_type != "Todos":
+            query = query.eq("test_type", filter_type)
+        
+        test_cases = query.execute().data or []
+    except Exception as e:
+        test_cases = []
+        st.error(f"Erro ao buscar casos de teste: {e}")
         
     if not test_cases:
         st.info("Nenhum caso de teste encontrado com os filtros selecionados.")
@@ -232,15 +244,18 @@ def render_test_cases_tab(project_id: str):
                                     
                                     if st.button("Salvar Alterações", key=f"btn_tc_edit_{tc['id']}"):
                                         if e_cycle.strip():
-                                            supabase.table("test_cases").update({
-                                                "title": e_title,
-                                                "test_type": e_type,
-                                                "test_cycle": e_cycle.strip(),
-                                                "preconditions": e_pre,
-                                                "steps": e_steps,
-                                                "expected_result": e_exp
-                                            }).eq('id', tc['id']).execute()
-                                            st.rerun()
+                                            try:
+                                                supabase.table("test_cases").update({
+                                                    "title": e_title,
+                                                    "test_type": e_type,
+                                                    "test_cycle": e_cycle.strip(),
+                                                    "preconditions": e_pre,
+                                                    "steps": e_steps,
+                                                    "expected_result": e_exp
+                                                }).eq('id', tc['id']).execute()
+                                                st.rerun()
+                                            except Exception as e:
+                                                st.error(f"Erro ao atualizar: {e}")
                                         else:
                                             st.error("O campo Ciclo é obrigatório.")
 
@@ -257,15 +272,21 @@ def render_test_cases_tab(project_id: str):
                                         "status": "Não Executado",
                                         "test_cycle": tc.get('test_cycle', active_cycle)
                                     }
-                                    supabase.table("test_cases").insert(clone_payload).execute()
-                                    st.success("Caso de teste duplicado!")
-                                    st.rerun()
+                                    try:
+                                        supabase.table("test_cases").insert(clone_payload).execute()
+                                        st.success("Caso de teste duplicado!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro ao duplicar: {e}")
                             
                             with c_del:
                                 if user_role in ["admin", "owner"]:
                                     if st.button("🗑️ Excluir", key=f"btn_tc_del_{tc['id']}", type="primary"):
-                                        supabase.table("test_cases").delete().eq('id', tc['id']).execute()
-                                        st.rerun()
+                                        try:
+                                            supabase.table("test_cases").delete().eq('id', tc['id']).execute()
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Erro ao excluir: {e}")
                                 else:
                                     st.caption("🔒 Exclusão restrita")
 
@@ -273,14 +294,23 @@ def render_test_cases_tab(project_id: str):
                             st.write(f"**Status:** {status}")
                             st.write("**Executar Ciclo:**")
                             if st.button("🟢 Passou", key=f"p_{tc['id']}", use_container_width=True):
-                                supabase.table("test_cases").update({"status": "Passou"}).eq("id", tc['id']).execute()
-                                st.rerun()
+                                try:
+                                    supabase.table("test_cases").update({"status": "Passou"}).eq("id", tc['id']).execute()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro: {e}")
                             if st.button("🔴 Falhou", key=f"f_{tc['id']}", use_container_width=True):
-                                supabase.table("test_cases").update({"status": "Falhou"}).eq("id", tc['id']).execute()
-                                st.rerun()
+                                try:
+                                    supabase.table("test_cases").update({"status": "Falhou"}).eq("id", tc['id']).execute()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro: {e}")
                             if st.button("🟡 Bloqueado", key=f"b_{tc['id']}", use_container_width=True):
-                                supabase.table("test_cases").update({"status": "Bloqueado"}).eq("id", tc['id']).execute()
-                                st.rerun()
+                                try:
+                                    supabase.table("test_cases").update({"status": "Bloqueado"}).eq("id", tc['id']).execute()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro: {e}")
 
 
 # ==========================================
@@ -293,7 +323,6 @@ def render_bug_reports_tab(project_id: str):
     user_info = st.session_state.get("user", {})
     user_role = user_info.get("role", "editor")
     
-    # Campo global do ciclo/release ativa para novos bugs
     bug_cycle_input = st.text_input(
         "🏷️ Ciclo de Teste do Bug / Release (para novos registros)", 
         value="", 
@@ -383,21 +412,29 @@ def render_bug_reports_tab(project_id: str):
     # --- FILTROS DE BUGS ---
     col_bf1, col_bf2 = st.columns(2)
     with col_bf1:
-        existing_bug_cycles_res = supabase.table("bug_reports").select("test_cycle").eq("project_id", project_id).execute()
-        bug_cycles_list = sorted(list(set([row.get("test_cycle") for row in (existing_bug_cycles_res.data or []) if row.get("test_cycle") and row.get("test_cycle").strip()])))
-        
+        try:
+            existing_bug_cycles_res = supabase.table("bug_reports").select("test_cycle").eq("project_id", project_id).execute()
+            bug_cycles_list = sorted(list(set([row.get("test_cycle") for row in (existing_bug_cycles_res.data or []) if row.get("test_cycle") and row.get("test_cycle").strip()])))
+        except Exception as e:
+            bug_cycles_list = []
+            st.error(f"Erro ao carregar ciclos de bugs: {e}")
+            
         bug_cycle_filter = st.selectbox("Filtrar por Ciclo do Bug:", ["Todos"] + bug_cycles_list, key="bug_cycle_filter_select")
     
     with col_bf2:
         bug_status_filter = st.selectbox("Filtrar por Status do Bug:", ["Todos", "Aberto", "Em correção", "Pronto para Teste", "Passou", "Fechado"], key="bug_status_filter_select")
     
-    b_query = supabase.table("bug_reports").select("*").eq("project_id", project_id)
-    if bug_cycle_filter != "Todos":
-        b_query = b_query.eq("test_cycle", bug_cycle_filter)
-    if bug_status_filter != "Todos":
-        b_query = b_query.eq("status", bug_status_filter)
-        
-    bugs = b_query.execute().data or []
+    try:
+        b_query = supabase.table("bug_reports").select("*").eq("project_id", project_id)
+        if bug_cycle_filter != "Todos":
+            b_query = b_query.eq("test_cycle", bug_cycle_filter)
+        if bug_status_filter != "Todos":
+            b_query = b_query.eq("status", bug_status_filter)
+            
+        bugs = b_query.execute().data or []
+    except Exception as e:
+        bugs = []
+        st.error(f"Erro ao buscar relatórios de bug: {e}")
     
     if not bugs:
         st.info("Nenhum bug registrado com estes filtros.")
@@ -463,9 +500,12 @@ def render_bug_reports_tab(project_id: str):
                             )
                             if new_b_status != bug_status:
                                 if st.button("💾 Salvar Status", key=f"btn_save_st_{bug['id']}"):
-                                    supabase.table("bug_reports").update({"status": new_b_status}).eq("id", bug['id']).execute()
-                                    st.success("Status atualizado!")
-                                    st.rerun()
+                                    try:
+                                        supabase.table("bug_reports").update({"status": new_b_status}).eq("id", bug['id']).execute()
+                                        st.success("Status atualizado!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro ao atualizar status: {e}")
 
                         # --- EDITAR BUG ---
                         with c_edit:
@@ -485,16 +525,19 @@ def render_bug_reports_tab(project_id: str):
                                 
                                 if st.button("Salvar Alterações", key=f"btn_bug_edit_{bug['id']}"):
                                     if e_cycle.strip():
-                                        supabase.table("bug_reports").update({
-                                            "title": e_title, 
-                                            "test_cycle": e_cycle.strip(), 
-                                            "severity": e_sev, 
-                                            "description": e_desc,
-                                            "steps": e_steps,
-                                            "expected_behavior": e_exp, 
-                                            "actual_behavior": e_act
-                                        }).eq('id', bug['id']).execute()
-                                        st.rerun()
+                                        try:
+                                            supabase.table("bug_reports").update({
+                                                "title": e_title, 
+                                                "test_cycle": e_cycle.strip(), 
+                                                "severity": e_sev, 
+                                                "description": e_desc,
+                                                "steps": e_steps,
+                                                "expected_behavior": e_exp, 
+                                                "actual_behavior": e_act
+                                            }).eq('id', bug['id']).execute()
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Erro ao salvar edições: {e}")
                                     else:
                                         st.error("O campo Ciclo é obrigatório.")
 
@@ -523,8 +566,11 @@ def render_bug_reports_tab(project_id: str):
                         with c_del:
                             if user_role in ["admin", "owner"]:
                                 if st.button("🗑️ Excluir", key=f"btn_bug_del_{bug['id']}", type="primary"):
-                                    supabase.table("bug_reports").delete().eq('id', bug['id']).execute()
-                                    st.rerun()
+                                    try:
+                                        supabase.table("bug_reports").delete().eq('id', bug['id']).execute()
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro ao excluir bug: {e}")
                             else:
                                 st.caption("🔒 Restrito")
 

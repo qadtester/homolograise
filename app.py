@@ -261,12 +261,10 @@ elif page == "📊 Métricas & Exportação":
     )
 
 elif page == "👥 Gestão de Equipe":
-    st.title("👥 Gestão de Membros da Organização")
-    st.write(
-        "Gerencie os usuários e permissões da organização ativa"
-        f" **{active_team.get('name')}**."
-    )
+    st.title("👥 Gestão de Membros da Equipe")
+    st.write(f"Gerencie permissões e membros da equipe **{active_team.get('name')}**.")
 
+    # 1. Busca os membros da equipe atual
     members_res = (
         supabase.table("team_members")
         .select("role, users(id, name, email, created_at)")
@@ -279,59 +277,72 @@ elif page == "👥 Gestão de Equipe":
         for m in members_res.data:
             if m.get("users"):
                 u_data = m["users"]
-                u_data["role"] = m["role"]
+                u_data["role"] = m.get("role", "editor")
                 members.append(u_data)
 
+    st.divider()
+
+    # Dicionário amigável de funções
+    ROLE_LABELS = {
+        "admin": "Líder (Criar, Editar, Excluir, Gerenciar Time)",
+        "editor": "Editor (Criar e Editar)",
+        "viewer": "Leitor (Apenas Visualizar)"
+    }
+    ROLE_KEYS = list(ROLE_LABELS.keys())
+
+    # 2. Lista todos os membros em tabela/cards
     for member in members:
-        cols = st.columns([3, 2, 2, 2])
+        cols = st.columns([3, 3, 2, 2])
+        
         with cols[0]:
             st.write(f"**{member['name']}**")
-            st.caption(member["email"])
+            st.caption(f"📧 {member['email']}")
+        
         with cols[1]:
-            is_self = member["id"] == user_info["id"]
-            available_roles = ["editor", "admin"]
-            current_role_index = (
-                available_roles.index(member["role"])
-                if member["role"] in available_roles
-                else 0
-            )
+            is_self = (member["id"] == user_info["id"])
+            current_role = member["role"] if member["role"] in ROLE_KEYS else "editor"
+            current_role_index = ROLE_KEYS.index(current_role)
 
-            new_role = st.selectbox(
-                "Papel",
-                options=available_roles,
-                index=current_role_index,
-                key=f"role_{member['id']}",
-                label_visibility="collapsed",
-            )
+            if is_self:
+                st.info(f"**Sua Função:** {ROLE_LABELS[current_role].split('(')[0]}")
+            else:
+                # Dropdown para alterar permissão do membro
+                new_role_key = st.selectbox(
+                    "Permissão",
+                    options=ROLE_KEYS,
+                    format_func=lambda x: ROLE_LABELS[x],
+                    index=current_role_index,
+                    key=f"role_sel_{member['id']}",
+                    label_visibility="collapsed"
+                )
 
-            if new_role != member["role"]:
-                if is_self:
-                    st.warning("Você não pode alterar seu próprio cargo.")
-                else:
-                    supabase.table("team_members").update(
-                        {"role": new_role}
-                    ).eq("team_id", active_team["id"]).eq(
-                        "user_id", member["id"]
-                    ).execute()
-                    st.success(
-                        f"Cargo de {member['name']} alterado para {new_role}!"
-                    )
+                if new_role_key != member["role"]:
+                    supabase.table("team_members") \
+                        .update({"role": new_role_key}) \
+                        .eq("team_id", active_team["id"]) \
+                        .eq("user_id", member["id"]) \
+                        .execute()
+                    st.success(f"Permissão de {member['name']} atualizada para {ROLE_LABELS[new_role_key].split('(')[0]}!")
                     st.rerun()
 
         with cols[2]:
-            st.write(
-                f"Entrou em: {member['created_at'][:10] if member.get('created_at') else ''}"
-            )
+            st.caption(f"Vinculado em:\n{member['created_at'][:10] if member.get('created_at') else 'N/A'}")
+
         with cols[3]:
             if not is_self:
-                if st.button("🗑️ Remover", key=f"rm_mem_{member['id']}"):
-                    supabase.table("team_members").delete().eq(
-                        "team_id", active_team["id"]
-                    ).eq("user_id", member["id"]).execute()
-                    st.success(f"Usuário {member['name']} removido da equipe.")
+                # Botão para REMOVER O ACESSO do usuário à equipe
+                if st.button("🗑️ Revogar Acesso", key=f"rm_mem_{member['id']}", type="secondary"):
+                    supabase.table("team_members") \
+                        .delete() \
+                        .eq("team_id", active_team["id"]) \
+                        .eq("user_id", member["id"]) \
+                        .execute()
+                    st.success(f"Acesso de {member['name']} removido com sucesso!")
                     st.rerun()
             else:
-                st.caption("Você (Ativo)")
+                st.caption("*(Sua conta)*")
+        
+        st.divider()
 
 elif page == "👑 Painel Admin Master":
     admin_panel.render_master_admin_panel()

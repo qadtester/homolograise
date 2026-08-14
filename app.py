@@ -1,7 +1,7 @@
 import streamlit as st
-from modules import auth, projects, requirements, testing, metrics, admin_panel
+from config.ai_config import is_master_user, render_ai_provider_selector
 from config.database import supabase
-from config.ai_config import render_ai_provider_selector, is_master_user
+from modules import admin_panel, auth, metrics, projects, requirements, testing
 
 # ==============================================================================
 # 1. CONFIGURAÇÃO DA PÁGINA
@@ -47,14 +47,24 @@ if not user_teams and not is_master_user():
 
 # Gerenciamento da Equipe Ativa na Sessão
 if user_teams:
-    if "current_team_id" not in st.session_state or not st.session_state["current_team_id"]:
+    if (
+        "current_team_id" not in st.session_state
+        or not st.session_state["current_team_id"]
+    ):
         st.session_state["current_team_id"] = user_teams[0]["id"]
 
     valid_team_ids = [t["id"] for t in user_teams]
     if st.session_state["current_team_id"] not in valid_team_ids:
         st.session_state["current_team_id"] = user_teams[0]["id"]
 
-    active_team = next((t for t in user_teams if t["id"] == st.session_state["current_team_id"]), user_teams[0])
+    active_team = next(
+        (
+            t
+            for t in user_teams
+            if t["id"] == st.session_state["current_team_id"]
+        ),
+        user_teams[0],
+    )
     user_info["team_id"] = active_team["id"]
     user_info["role"] = active_team.get("user_role", "editor")
 else:
@@ -65,22 +75,22 @@ else:
 # ==============================================================================
 with st.sidebar:
     st.title("🎯 QA Hub")
-    
+
     st.write(f"👤 **Usuário:** {user_info.get('name', 'Usuário')}")
     st.caption(f"📧 {user_info.get('email', '')}")
-    
+
     if is_master_user():
         st.caption("👑 **Papel:** `MASTER`")
     else:
         st.caption(f"🛡️ **Papel:** `{user_info.get('role', 'editor')}`")
-    
+
     st.divider()
 
     # --- SELETOR DE EQUIPE / ORGANIZAÇÃO ---
     if user_teams:
         st.subheader("🏢 Organização Ativa")
         team_options = {t["name"]: t["id"] for t in user_teams}
-        
+
         active_team_id = active_team.get("id") if active_team else None
         if active_team_id in team_options.values():
             default_index = list(team_options.values()).index(active_team_id)
@@ -88,33 +98,60 @@ with st.sidebar:
             default_index = 0
 
         selected_team_name = st.selectbox(
-            "Alternar Equipe:", 
-            options=list(team_options.keys()), 
-            index=default_index
+            "Alternar Equipe:",
+            options=list(team_options.keys()),
+            index=default_index,
         )
-        
-        if team_options[selected_team_name] != st.session_state.get("current_team_id"):
-            st.session_state["current_team_id"] = team_options[selected_team_name]
+
+        if team_options[selected_team_name] != st.session_state.get(
+            "current_team_id"
+        ):
+            st.session_state["current_team_id"] = team_options[
+                selected_team_name
+            ]
             st.rerun()
 
-        st.info(f"🔑 **Código da Equipe:** `{active_team.get('invite_code', 'N/A')}`")
+        st.info(
+            f"🔑 **Código da Equipe:** `{active_team.get('invite_code', 'N/A')}`"
+        )
 
         with st.expander("➕ Entrar em Outra Equipe"):
             with st.form("sidebar_join_team"):
-                new_code = st.text_input("Código de Convite", placeholder="Ex: A1B2C3")
+                new_code = st.text_input(
+                    "Código de Convite", placeholder="Ex: A1B2C3"
+                )
                 if st.form_submit_button("Vincular Equipe"):
                     if new_code.strip():
-                        t_lookup = supabase.table("teams").select("id, name").eq("invite_code", new_code.strip().upper()).execute()
+                        t_lookup = (
+                            supabase.table("teams")
+                            .select("id, name")
+                            .eq("invite_code", new_code.strip().upper())
+                            .execute()
+                        )
                         if t_lookup.data:
                             found_t = t_lookup.data[0]
-                            supabase.table("team_members").upsert({
-                                "team_id": found_t["id"],
-                                "user_id": user_info["id"],
-                                "role": "editor"
-                            }, on_conflict="team_id,user_id").execute()
-                            
+
+                            # CORREÇÃO AQUI: Verifica a existência antes de inserir para evitar erro no Postgres
+                            check_exists = (
+                                supabase.table("team_members")
+                                .select("id")
+                                .eq("team_id", found_t["id"])
+                                .eq("user_id", user_info["id"])
+                                .execute()
+                            )
+
+                            if not check_exists.data:
+                                supabase.table("team_members").insert({
+                                    "team_id": found_t["id"],
+                                    "user_id": user_info["id"],
+                                    "role": "editor",
+                                }).execute()
+
                             st.session_state["current_team_id"] = found_t["id"]
-                            st.success(f"Vinculado à equipe '{found_t['name']}' com sucesso!")
+                            st.success(
+                                f"Vinculado à equipe '{found_t['name']}' com"
+                                " sucesso!"
+                            )
                             st.rerun()
                         else:
                             st.error("Código de convite inválido.")
@@ -138,7 +175,7 @@ with st.sidebar:
         "🧪 Módulo de Testes",
         "📊 Métricas & Exportação",
     ]
-    
+
     # Adiciona aba de gestão de membros se for admin da equipe ativa
     if user_info.get("role") == "admin" and not is_master_user():
         page_options.append("👥 Gestão de Equipe")
@@ -155,10 +192,17 @@ with st.sidebar:
 active_project = None
 if page not in ["👥 Gestão de Equipe", "👑 Painel Admin Master"]:
     active_project = projects.render_project_selector()
-    
-    if not active_project and page in ["📝 Requisitos", "🧪 Módulo de Testes", "📊 Métricas & Exportação"]:
+
+    if not active_project and page in [
+        "📝 Requisitos",
+        "🧪 Módulo de Testes",
+        "📊 Métricas & Exportação",
+    ]:
         st.warning("⚠️ **Nenhum projeto selecionado!**")
-        st.info("Por favor, selecione ou crie um projeto no menu lateral (ou no módulo **Gestão de Projetos**) para prosseguir.")
+        st.info(
+            "Por favor, selecione ou crie um projeto no menu lateral (ou no"
+            " módulo **Gestão de Projetos**) para prosseguir."
+        )
         st.stop()
 
 # ==============================================================================
@@ -176,27 +220,60 @@ elif page == "🧪 Módulo de Testes":
 elif page == "📊 Métricas & Exportação":
     project_id = active_project["id"]
     try:
-        test_cases = supabase.table("test_cases").select("*").eq("project_id", project_id).execute().data or []
-        bug_reports = supabase.table("bug_reports").select("*").eq("project_id", project_id).execute().data or []
-        risk_matrix = supabase.table("risk_matrix").select("*").eq("project_id", project_id).execute().data or []
-        user_stories = supabase.table("user_stories").select("*").eq("project_id", project_id).execute().data or []
+        test_cases = (
+            supabase.table("test_cases")
+            .select("*")
+            .eq("project_id", project_id)
+            .execute()
+            .data
+            or []
+        )
+        bug_reports = (
+            supabase.table("bug_reports")
+            .select("*")
+            .eq("project_id", project_id)
+            .execute()
+            .data
+            or []
+        )
+        risk_matrix = (
+            supabase.table("risk_matrix")
+            .select("*")
+            .eq("project_id", project_id)
+            .execute()
+            .data
+            or []
+        )
+        user_stories = (
+            supabase.table("user_stories")
+            .select("*")
+            .eq("project_id", project_id)
+            .execute()
+            .data
+            or []
+        )
     except Exception as e:
         st.error(f"Erro ao carregar métricas do Supabase: {e}")
         test_cases, bug_reports, risk_matrix, user_stories = [], [], [], []
 
-    metrics.render_metrics_dashboard(test_cases, bug_reports, risk_matrix, user_stories)
+    metrics.render_metrics_dashboard(
+        test_cases, bug_reports, risk_matrix, user_stories
+    )
 
 elif page == "👥 Gestão de Equipe":
     st.title("👥 Gestão de Membros da Organização")
-    st.write(f"Gerencie os usuários e permissões da organização ativa **{active_team.get('name')}**.")
-    
+    st.write(
+        "Gerencie os usuários e permissões da organização ativa"
+        f" **{active_team.get('name')}**."
+    )
+
     members_res = (
         supabase.table("team_members")
         .select("role, users(id, name, email, created_at)")
         .eq("team_id", active_team["id"])
         .execute()
     )
-    
+
     members = []
     if members_res.data:
         for m in members_res.data:
@@ -204,39 +281,53 @@ elif page == "👥 Gestão de Equipe":
                 u_data = m["users"]
                 u_data["role"] = m["role"]
                 members.append(u_data)
-    
+
     for member in members:
         cols = st.columns([3, 2, 2, 2])
         with cols[0]:
             st.write(f"**{member['name']}**")
-            st.caption(member['email'])
+            st.caption(member["email"])
         with cols[1]:
-            is_self = (member["id"] == user_info["id"])
+            is_self = member["id"] == user_info["id"]
             available_roles = ["editor", "admin"]
-            current_role_index = available_roles.index(member["role"]) if member["role"] in available_roles else 0
-            
-            new_role = st.selectbox(
-                "Papel", 
-                options=available_roles, 
-                index=current_role_index, 
-                key=f"role_{member['id']}",
-                label_visibility="collapsed"
+            current_role_index = (
+                available_roles.index(member["role"])
+                if member["role"] in available_roles
+                else 0
             )
-            
+
+            new_role = st.selectbox(
+                "Papel",
+                options=available_roles,
+                index=current_role_index,
+                key=f"role_{member['id']}",
+                label_visibility="collapsed",
+            )
+
             if new_role != member["role"]:
                 if is_self:
                     st.warning("Você não pode alterar seu próprio cargo.")
                 else:
-                    supabase.table("team_members").update({"role": new_role}).eq("team_id", active_team["id"]).eq("user_id", member["id"]).execute()
-                    st.success(f"Cargo de {member['name']} alterado para {new_role}!")
+                    supabase.table("team_members").update(
+                        {"role": new_role}
+                    ).eq("team_id", active_team["id"]).eq(
+                        "user_id", member["id"]
+                    ).execute()
+                    st.success(
+                        f"Cargo de {member['name']} alterado para {new_role}!"
+                    )
                     st.rerun()
-                    
+
         with cols[2]:
-            st.write(f"Entrou em: {member['created_at'][:10] if member.get('created_at') else ''}")
+            st.write(
+                f"Entrou em: {member['created_at'][:10] if member.get('created_at') else ''}"
+            )
         with cols[3]:
             if not is_self:
                 if st.button("🗑️ Remover", key=f"rm_mem_{member['id']}"):
-                    supabase.table("team_members").delete().eq("team_id", active_team["id"]).eq("user_id", member["id"]).execute()
+                    supabase.table("team_members").delete().eq(
+                        "team_id", active_team["id"]
+                    ).eq("user_id", member["id"]).execute()
                     st.success(f"Usuário {member['name']} removido da equipe.")
                     st.rerun()
             else:

@@ -177,9 +177,9 @@ def render_test_cases_tab(project_id: str):
             csv_data = export_to_csv(test_cases)
             st.download_button(
                 label="📥 Baixar Casos de Teste (CSV)",
-                data=csv_data,
+                data=csv_data.encode("utf-8-sig"),
                 file_name=f"casos_de_teste_{project_id[:8]}.csv",
-                mime="text/csv",
+                mime="text/csv; charset=utf-8-sig",
                 key="btn_dl_tc_csv"
             )
         with col_dl2:
@@ -408,9 +408,9 @@ def render_bug_reports_tab(project_id: str):
             csv_bugs = export_to_csv(bugs)
             st.download_button(
                 label="📥 Baixar Relatório de Bugs (CSV)",
-                data=csv_bugs,
+                data=csv_bugs.encode("utf-8-sig"),
                 file_name=f"bug_reports_{project_id[:8]}.csv",
-                mime="text/csv",
+                mime="text/csv; charset=utf-8-sig",
                 key="btn_dl_bug_csv"
             )
         with col_bdl2:

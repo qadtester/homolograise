@@ -312,9 +312,9 @@ def render_requirements_module():
                     csv_data = export_to_csv(table_data)
                     st.download_button(
                         label="📥 Baixar Matriz de Risco (CSV)",
-                        data=csv_data,
+                        data=csv_data.encode("utf-8-sig"),
                         file_name="matriz_de_risco.csv",
-                        mime="text/csv"
+                        mime="text/csv; charset=utf-8-sig"
                     )
                 with col_d2:
                     md_data = export_to_markdown(table_data, "Matriz de Risco do Projeto")

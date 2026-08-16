@@ -50,7 +50,14 @@ def render_master_admin_panel():
                     del_key = f"del_user_{u['id']}"
                     if st.button(f"🗑️ Excluir Usuário e Dados Relacionados", key=del_key, type="primary"):
                         try:
-                            # A. Apagar dependências dos projetos exclusivos (Personas, User Stories, Test Cases, Bugs, Riscos, Documentos)
+                            # 1. Limpa o vínculo do usuário atual de qualquer equipe (evita erro em users.team_id)
+                            supabase.table("users").update({"team_id": None}).eq("id", u["id"]).execute()
+
+                            # 2. Se o usuário for dono de equipes, desvincula OUTROS usuários dessas equipes
+                            if team_ids_owned:
+                                supabase.table("users").update({"team_id": None}).in_("team_id", team_ids_owned).execute()
+
+                            # 3. Apaga dependências dos projetos exclusivos (Personas, User Stories, Test Cases, Bugs, Riscos, Documentos)
                             for ep in exclusive_projects:
                                 p_id = ep["id"]
                                 supabase.table("personas").delete().eq("project_id", p_id).execute()
@@ -60,18 +67,22 @@ def render_master_admin_panel():
                                 supabase.table("risk_matrix").delete().eq("project_id", p_id).execute()
                                 supabase.table("project_documents").delete().eq("project_id", p_id).execute()
                             
-                            # B. Apagar os projetos exclusivos vinculados às equipes do owner
+                            # 4. Apaga os projetos das equipes do owner
                             if team_ids_owned:
                                 supabase.table("projects").delete().in_("team_id", team_ids_owned).execute()
 
-                            # C. Remover vínculos de team_members do usuário
+                            # 5. Remove TODOS os membros vinculados às equipes desse owner
+                            if team_ids_owned:
+                                supabase.table("team_members").delete().in_("team_id", team_ids_owned).execute()
+
+                            # 6. Remove vínculos diretos do próprio usuário na tabela team_members
                             supabase.table("team_members").delete().eq("user_id", u["id"]).execute()
 
-                            # D. Apagar as equipes das quais ele era owner
+                            # 7. Apaga as equipes das quais ele era owner
                             if team_ids_owned:
                                 supabase.table("teams").delete().in_("id", team_ids_owned).execute()
 
-                            # E. Por fim, deletar o registro principal do usuário
+                            # 8. Por fim, deleta o registro principal do usuário
                             supabase.table("users").delete().eq("id", u["id"]).execute()
 
                             st.success(f"Usuário {u['name']} e todos os dados relacionados foram excluídos com sucesso!")

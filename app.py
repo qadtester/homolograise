@@ -76,6 +76,8 @@ else:
 
 # IDENTIFICA SE O USUÁRIO LOGADO É O DONO/CRIADOR DA EQUIPE ATIVA
 is_team_owner = active_team.get("owner_id") == user_info["id"]
+user_info["is_team_owner"] = is_team_owner
+user_info["is_master"] = is_master_user()
 
 # ==============================================================================
 # 4. SIDEBAR (PERFIL, SELETOR DE EQUIPE, PROJETO E NAVEGAÇÃO)

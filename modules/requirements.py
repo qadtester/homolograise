@@ -2,7 +2,7 @@ import streamlit as st
 from config.database import supabase
 from config.ai_config import generate_istqb_content
 from utils.export import export_to_csv, export_to_markdown
-from utils.permissions import can_create, can_edit
+from utils.permissions import can_create, can_edit, can_delete_items
 
 def render_requirements_module():
     st.header("📋 QA & Requisitos Hub - Gerenciamento de Requisitos e Riscos")
@@ -87,53 +87,54 @@ def render_requirements_module():
                     else:
                         st.error("Falha ao gerar os requisitos. Verifique sua chave de API e tente novamente.")
 
-    # ------------------------------------------
-    # ABA 1: PERSONAS
-    # ------------------------------------------
-    with tab_personas:
-        st.subheader("Personas do Projeto")
-        
-        if can_create(user_info):
-            with st.form("form_persona_manual", clear_on_submit=True):
-                name = st.text_input("Nome *")
-                role = st.text_input("Papel / Função")
-                goals = st.text_area("Objetivos")
-                pain_points = st.text_area("Dores")
+# ==========================================
+# ABA 1: PERSONAS
+# ==========================================
+with tab_personas:
+    st.header("Personas do Projeto")
+    
+    # Formulário de Criação (Requer can_create)
+    if can_create(user_info):
+        with st.expander("➕ Adicionar Nova Persona"):
+            with st.form("form_add_persona", clear_on_submit=True):
+                p_name = st.text_input("Nome da Persona")
+                p_role = st.text_input("Papel / Cargo")
+                p_goals = st.text_area("Objetivos")
+                p_pain = st.text_area("Dores / Necessidades")
                 
-                if st.form_submit_button("💾 Salvar Persona"):
-                    if name.strip():
+                if st.form_submit_button("Salvar Persona"):
+                    if p_name.strip():
                         try:
                             supabase.table('personas').insert({
-                                "project_id": project_id, 
-                                "name": name, 
-                                "role": role, 
-                                "goals": goals, 
-                                "pain_points": pain_points, 
-                                "generated_by_ai": False
+                                "name": p_name,
+                                "role": p_role,
+                                "goals": p_goals,
+                                "pain_points": p_pain
                             }).execute()
-                            st.success("Persona salva com sucesso!")
+                            st.success("Persona criada com sucesso!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Erro ao salvar Persona no banco: {e}")
+                            st.error(f"Erro ao salvar persona: {e}")
                     else:
-                        st.warning("O nome da persona é obrigatório.")
+                        st.warning("O campo Nome é obrigatório.")
 
-        st.divider()
-        try:
-            personas = supabase.table('personas').select('*').eq('project_id', project_id).execute().data or []
-        except Exception as e:
-            personas = []
-            st.error(f"Erro ao carregar personas: {e}")
-
+    # Listagem de Personas
+    try:
+        res_personas = supabase.table('personas').select('*').execute()
+        personas = res_personas.data if res_personas.data else []
+        
         for p in personas:
-            badge = "🤖 IA" if p.get('generated_by_ai') else "✍️ Manual"
-            with st.expander(f"👤 {p.get('name', 'Sem nome')} - {p.get('role', 'N/A')} [{badge}]"):
-                st.markdown(f"**🎯 Objetivos:**\n{p.get('goals') or 'N/A'}")
-                st.markdown(f"**⚡ Dores / Frustrações:**\n{p.get('pain_points') or 'N/A'}")
+            with st.container():
+                st.subheader(f"👤 {p.get('name', 'Sem Nome')}")
+                st.write(f"**Papel:** {p.get('role', 'N/A')}")
+                st.write(f"**Objetivos:** {p.get('goals', 'N/A')}")
+                st.write(f"**Dores:** {p.get('pain_points', 'N/A')}")
                 
-                if can_edit(user_info):
-                    c_edit, c_del = st.columns(2)
-                    with c_edit:
+                # Ações de Edição e Exclusão separadas por permissão
+                c_edit, c_del = st.columns(2)
+                
+                with c_edit:
+                    if can_edit(user_info):
                         with st.popover("✏️ Editar Persona", key=f"pop_edit_p_{p['id']}"):
                             e_name = st.text_input("Nome", value=p.get('name', ''), key=f"e_p_name_{p['id']}")
                             e_role = st.text_input("Papel", value=p.get('role', ''), key=f"e_p_role_{p['id']}")
@@ -155,90 +156,68 @@ def render_requirements_module():
                                 else:
                                     st.error("O nome é obrigatório.")
 
-                    with c_del:
+                with c_del:
+                    if can_delete_items(user_info):
                         if st.button("🗑️ Excluir Persona", key=f"btn_p_del_{p['id']}", type="primary"):
                             try:
                                 supabase.table('personas').delete().eq('id', p['id']).execute()
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Erro ao excluir: {e}")
-
-    # ------------------------------------------
-    # ABA 2: HISTÓRIAS DE USUÁRIO
-    # ------------------------------------------
-    with tab_stories:
-        st.subheader("Histórias de Usuário")
-        
-        if can_create(user_info):
-            with st.form("form_us_manual", clear_on_submit=True):
-                title = st.text_input("Título *")
-                as_a = st.text_input("Como um(a)...")
-                i_want_to = st.text_input("Eu quero...")
-                so_that = st.text_input("Para que...")
-                acceptance_criteria = st.text_area("Critérios de Aceite (Dado que... Quando... Então...):")
                 
-                if st.form_submit_button("💾 Salvar User Story"):
-                    if title.strip():
+                st.divider()
+    except Exception as e:
+        st.error(f"Erro ao carregar personas: {e}")
+
+# ==========================================
+# ABA 2: USER STORIES
+# ==========================================
+with tab_stories:
+    st.header("User Stories")
+    
+    # Formulário de Criação (Requer can_create)
+    if can_create(user_info):
+        with st.expander("➕ Adicionar Nova User Story"):
+            with st.form("form_add_us", clear_on_submit=True):
+                us_title = st.text_input("Título da História")
+                us_as_a = st.text_input("Como um (Perfil)")
+                us_want = st.text_input("Eu quero (Ação)")
+                us_so = st.text_input("Para que (Benefício)")
+                us_crit = st.text_area("Critérios de Aceite")
+                
+                if st.form_submit_button("Salvar User Story"):
+                    if us_title.strip():
                         try:
                             supabase.table('user_stories').insert({
-                                "project_id": project_id, 
-                                "title": title, 
-                                "as_a": as_a, 
-                                "i_want_to": i_want_to, 
-                                "so_that": so_that, 
-                                "acceptance_criteria": acceptance_criteria, 
-                                "generated_by_ai": False
+                                "title": us_title,
+                                "as_a": us_as_a,
+                                "i_want_to": us_want,
+                                "so_that": us_so,
+                                "acceptance_criteria": us_crit
                             }).execute()
                             st.success("User Story salva com sucesso!")
                             st.rerun()
                         except Exception as e:
-                            st.error(f"Erro ao salvar User Story: {e}")
+                            st.error(f"Erro ao salvar: {e}")
                     else:
-                        st.warning("O título da história de usuário é obrigatório.")
+                        st.warning("O título é obrigatório.")
 
-        st.divider()
-        try:
-            stories = supabase.table('user_stories').select('*').eq('project_id', project_id).execute().data or []
-        except Exception as e:
-            stories = []
-            st.error(f"Erro ao carregar histórias de usuário: {e}")
-
+    # Listagem de User Stories
+    try:
+        res_us = supabase.table('user_stories').select('*').execute()
+        stories = res_us.data if res_us.data else []
+        
         for us in stories:
-            badge = "🤖 IA" if us.get('generated_by_ai') else "✍️ Manual"
-            with st.expander(f"📌 {us.get('title', 'Sem título')} [{badge}]"):
-                st.markdown(f"**👤 Como um(a):** {us.get('as_a') or 'N/A'}")
-                st.markdown(f"**🎯 Eu quero:** {us.get('i_want_to') or 'N/A'}")
-                st.markdown(f"**💡 Para que:** {us.get('so_that') or 'N/A'}")
+            with st.container():
+                st.subheader(f"📖 {us.get('title', 'Sem Título')}")
+                st.markdown(f"**Como** {us.get('as_a', '...')} **eu quero** {us.get('i_want_to', '...')} **para que** {us.get('so_that', '...')}.")
+                st.caption(f"**Critérios de Aceite:** {us.get('acceptance_criteria', 'N/A')}")
                 
-                st.markdown("---")
-                st.markdown("**✅ Critérios de Aceite (BDD):**")
+                # Ações de Edição e Exclusão separadas por permissão
+                c_edit, c_del = st.columns(2)
                 
-                crit = us.get('acceptance_criteria', 'Sem critérios.')
-                if isinstance(crit, str) and crit.strip():
-                    formatted = crit
-                    keywords = [
-                        ("Dado que ", "\n\n**Dado que** "), ("dado que ", "\n\n**Dado que** "),
-                        (" Quando ", "\n**Quando** "), (" quando ", "\n**Quando** "),
-                        (" Então ", "\n**Então** "), (" então ", "\n**Então** "),
-                        (" E ", "\n**E** "), (" e ", "\n**E** ")
-                    ]
-                    for old, new in keywords:
-                        formatted = formatted.replace(old, new)
-                    
-                    if formatted.startswith("Dado que"):
-                        formatted = formatted.replace("Dado que", "**Dado que**", 1)
-                    elif formatted.startswith("Quando"):
-                        formatted = formatted.replace("Quando", "**Quando**", 1)
-                    elif formatted.startswith("Então"):
-                        formatted = formatted.replace("Então", "**Então**", 1)
-
-                    st.markdown(formatted.strip())
-                else:
-                    st.write(crit)
-
-                if can_edit(user_info):
-                    c_edit, c_del = st.columns(2)
-                    with c_edit:
+                with c_edit:
+                    if can_edit(user_info):
                         with st.popover("✏️ Editar User Story", key=f"pop_edit_us_{us['id']}"):
                             e_title = st.text_input("Título", value=us.get('title', ''), key=f"e_us_t_{us['id']}")
                             e_as_a = st.text_input("Como um", value=us.get('as_a', ''), key=f"e_us_a_{us['id']}")
@@ -262,232 +241,104 @@ def render_requirements_module():
                                 else:
                                     st.error("O título é obrigatório.")
 
-                    with c_del:
+                with c_del:
+                    if can_delete_items(user_info):
                         if st.button("🗑️ Excluir User Story", key=f"btn_us_del_{us['id']}", type="primary"):
                             try:
                                 supabase.table('user_stories').delete().eq('id', us['id']).execute()
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Erro ao excluir: {e}")
-
-    # ------------------------------------------
-    # ABA 3: MATRIZ DE RISCO
-    # ------------------------------------------
-    with tab_risks:
-        st.subheader("⚠️ Matriz de Risco do Projeto")
-        st.write("Gerencie os riscos de produto e projeto conforme o modelo padrão.")
-
-        if can_create(user_info):
-            with st.expander("✨ Gerar Matriz de Risco Automatizada via IA", expanded=False):
-                st.info("💡 A IA fará a leitura de todos os documentos e descrições do projeto para mapear os riscos e estratégias de mitigação automaticamente.")
-                if st.button("🚀 Gerar Riscos com IA", type="primary", key="btn_gen_risk_ai"):
-                    with st.spinner("Analisando o projeto e mapeando riscos potenciais..."):
-                        data = generate_istqb_content("risk_matrix", project_id)
-                        
-                        if data and isinstance(data, list):
-                            sucesso_riscos = 0
-                            for item in data:
-                                prob_str = item.get("probability", "Média")
-                                imp_str = item.get("impact", "Médio")
-                                
-                                prob_map = {"Baixa": "1 - Baixo", "Média": "2 - Médio", "Alta": "3 - Alto"}
-                                imp_map = {"Baixo": "1 - Baixo", "Médio": "2 - Médio", "Alto": "3 - Alto"}
-                                
-                                prob_formatted = prob_map.get(prob_str, "2 - Médio")
-                                imp_formatted = imp_map.get(imp_str, "2 - Médio")
-                                
-                                try:
-                                    p_val = int(prob_formatted.split(" - ")[0])
-                                    i_val = int(imp_formatted.split(" - ")[0])
-                                    score = p_val * i_val
-                                except Exception:
-                                    score = 4
-
-                                payload = {
-                                    "project_id": project_id,
-                                    "risk_description": item.get("risk_description", "Risco identificado por IA"),
-                                    "risk_type": "Produto",
-                                    "probability": prob_formatted,
-                                    "impact": imp_formatted,
-                                    "risk_score": score,
-                                    "strategy": "Mitigar",
-                                    "correction_plan": item.get("mitigation_strategy", "Monitorar plano de ação"),
-                                    "risk_owner": "QA / IA",
-                                    "periodicity": "Sprint",
-                                    "generated_by_ai": True
-                                }
-                                
-                                try:
-                                    supabase.table('risk_matrix').insert(payload).execute()
-                                    sucesso_riscos += 1
-                                except Exception:
-                                    pass
-                            
-                            if sucesso_riscos > 0:
-                                st.success(f"{sucesso_riscos} riscos mapeados e salvos com sucesso na Matriz de Risco!")
-                                st.rerun()
-                            else:
-                                st.error("Erro ao salvar os riscos gerados no banco de dados.")
-                        else:
-                            st.error("A IA não retornou um formato válido para a matriz de risco. Tente novamente.")
-
-            with st.expander("➕ Cadastrar Novo Risco Manualmente", expanded=False):
-                with st.form("form_risk_manual", clear_on_submit=True):
-                    risk_desc = st.text_area("Descrição do Risco *")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        risk_type = st.selectbox("Tipo", ["Produto", "Projeto"])
-                        probability = st.selectbox("Probabilidade", ["1 - Baixo", "2 - Médio", "3 - Alto"])
-                    with col2:
-                        impact = st.selectbox("Impacto", ["1 - Baixo", "2 - Médio", "3 - Alto"])
-                        strategy = st.selectbox("Estratégia", ["Mitigar", "Transferir", "Evitar", "Aceitar"])
-                    with col3:
-                        risk_owner = st.text_input("Dono do Risco", placeholder="Ex: QA Lead / PO")
-                        periodicity = st.text_input("Periodicidade", placeholder="Ex: Semanal / Sprint")
-
-                    correction_plan = st.text_area("Como Corrigir / Plano de Mitigação")
-
-                    if st.form_submit_button("💾 Salvar Risco", type="primary"):
-                        if not risk_desc.strip():
-                            st.error("A descrição do risco é obrigatória.")
-                        else:
-                            try:
-                                prob_val = int(probability.split(" - ")[0])
-                                imp_val = int(impact.split(" - ")[0])
-                                score = prob_val * imp_val
-
-                                supabase.table('risk_matrix').insert({
-                                    "project_id": project_id,
-                                    "risk_description": risk_desc,
-                                    "risk_type": risk_type,
-                                    "probability": probability,
-                                    "impact": impact,
-                                    "risk_score": score,
-                                    "strategy": strategy,
-                                    "correction_plan": correction_plan,
-                                    "risk_owner": risk_owner,
-                                    "periodicity": periodicity,
-                                    "generated_by_ai": False
-                                }).execute()
-                                st.success("Risco cadastrado com sucesso!")
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Erro ao salvar risco: {e}")
-
-        st.divider()
-        
-        try:
-            risks = supabase.table('risk_matrix').select('*').eq('project_id', project_id).execute().data or []
-        except Exception as e:
-            risks = []
-            st.error(f"Erro ao buscar riscos: {e}")
-
-        if not risks:
-            st.info("Nenhum risco cadastrado para este projeto.")
-        else:
-            with st.expander("📊 Visualizar Tabela Consolidada e Relatórios", expanded=False):
-                table_data = []
-                for r in risks:
-                    table_data.append({
-                        "ID": str(r.get('id', ''))[:8],
-                        "Risco": r.get('risk_description'),
-                        "Tipo": r.get('risk_type'),
-                        "Probabilidade": r.get('probability'),
-                        "Impacto": r.get('impact'),
-                        "Score (P x I)": r.get('risk_score'),
-                        "Estratégia": r.get('strategy'),
-                        "Como Corrigir": r.get('correction_plan'),
-                        "Dono": r.get('risk_owner'),
-                        "Periodicidade": r.get('periodicity')
-                    })
-
-                st.dataframe(table_data, use_container_width=True)
-
-                col_d1, col_d2 = st.columns(2)
-                with col_d1:
-                    csv_data = export_to_csv(table_data)
-                    st.download_button(
-                        label="📥 Baixar Matriz de Risco (CSV)",
-                        data=csv_data.encode("utf-8-sig"),
-                        file_name=f"matriz_de_risco_{project_id[:8]}.csv",
-                        mime="text/csv; charset=utf-8-sig",
-                        key="btn_dl_risk_csv"
-                    )
-                with col_d2:
-                    md_data = export_to_markdown(table_data, "Matriz de Risco do Projeto")
-                    st.download_button(
-                        label="📥 Baixar Relatório (Markdown)",
-                        data=md_data,
-                        file_name=f"matriz_de_risco_{project_id[:8]}.md",
-                        mime="text/markdown",
-                        key="btn_dl_risk_md"
-                    )
-
-            if can_edit(user_info):
-                st.divider()
-                st.subheader("✏️ Gerenciamento Individual (Editar / Excluir)")
                 
-                for r in risks:
-                    score = r.get('risk_score', 0)
-                    score_color = "🔴" if score >= 6 else ("🟡" if score >= 3 else "🟢")
-                    ai_badge = "🤖 IA" if r.get('generated_by_ai') else "✍️ Manual"
-                    
-                    with st.expander(f"{score_color} [{r.get('risk_type', 'Produto')}] Risco (Score: {score}) - {str(r.get('risk_description', ''))[:50]}... [{ai_badge}]"):
-                        
-                        with st.form(key=f"form_edit_risk_{r['id']}"):
-                            e_desc = st.text_area("Descrição do Risco *", value=r.get('risk_description', ''))
+                st.divider()
+    except Exception as e:
+        st.error(f"Erro ao carregar User Stories: {e}")
+
+# ==========================================
+# ABA 3: MATRIZ DE RISCO
+# ==========================================
+with tab_risks:
+    st.header("Matriz de Riscos")
+    
+    # Formulário de Criação (Requer can_create)
+    if can_create(user_info):
+        with st.expander("➕ Adicionar Novo Risco"):
+            with st.form("form_add_risk", clear_on_submit=True):
+                r_desc = st.text_input("Descrição do Risco")
+                r_prob = st.selectbox("Probabilidade", ["Baixa", "Média", "Alta"])
+                r_impact = st.selectbox("Impacto", ["Baixo", "Médio", "Alto"])
+                r_mitig = st.text_area("Plano de Mitigação")
+                
+                if st.form_submit_button("Salvar Risco"):
+                    if r_desc.strip():
+                        try:
+                            supabase.table('risk_matrix').insert({
+                                "description": r_desc,
+                                "probability": r_prob,
+                                "impact": r_impact,
+                                "mitigation": r_mitig
+                            }).execute()
+                            st.success("Risco registrado com sucesso!")
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Erro ao registrar risco: {e}")
+                    else:
+                        st.warning("A descrição é obrigatória.")
+
+    # Listagem e Gestão de Riscos
+    try:
+        res_risks = supabase.table('risk_matrix').select('*').execute()
+        risks = res_risks.data if res_risks.data else []
+        
+        for r in risks:
+            with st.container():
+                st.subheader(f"⚠️ {r.get('description', 'Sem descrição')}")
+                col_info1, col_info2 = st.columns(2)
+                col_info1.write(f"**Probabilidade:** {r.get('probability', 'N/A')}")
+                col_info2.write(f"**Impacto:** {r.get('impact', 'N/A')}")
+                st.write(f"**Mitigação:** {r.get('mitigation', 'N/A')}")
+                
+                c_edit, c_del = st.columns(2)
+                
+                with c_edit:
+                    if can_edit(user_info):
+                        with st.popover("✏️ Editar Risco", key=f"pop_edit_risk_{r['id']}"):
+                            e_desc = st.text_input("Descrição", value=r.get('description', ''), key=f"e_r_desc_{r['id']}")
                             
-                            ec1, ec2, ec3 = st.columns(3)
-                            with ec1:
-                                e_type = st.selectbox("Tipo", ["Produto", "Projeto"], index=0 if r.get('risk_type') == "Produto" else 1)
-                                probs = ["1 - Baixo", "2 - Médio", "3 - Alto"]
-                                p_idx = probs.index(r.get('probability')) if r.get('probability') in probs else 0
-                                e_prob = st.selectbox("Probabilidade", probs, index=p_idx)
-                            with ec2:
-                                imps = ["1 - Baixo", "2 - Médio", "3 - Alto"]
-                                i_idx = imps.index(r.get('impact')) if r.get('impact') in imps else 0
-                                e_imp = st.selectbox("Impacto", imps, index=i_idx)
-                                
-                                strats = ["Mitigar", "Transferir", "Evitar", "Aceitar"]
-                                s_idx = strats.index(r.get('strategy')) if r.get('strategy') in strats else 0
-                                e_strat = st.selectbox("Estratégia", strats, index=s_idx)
-                            with ec3:
-                                e_owner = st.text_input("Dono do Risco", value=r.get('risk_owner', ''))
-                                e_period = st.text_input("Periodicidade", value=r.get('periodicity', ''))
+                            prob_options = ["Baixa", "Média", "Alta"]
+                            curr_prob_idx = prob_options.index(r.get('probability', 'Média')) if r.get('probability') in prob_options else 1
+                            e_prob = st.selectbox("Probabilidade", prob_options, index=curr_prob_idx, key=f"e_r_prob_{r['id']}")
+                            
+                            imp_options = ["Baixo", "Médio", "Alto"]
+                            curr_imp_idx = imp_options.index(r.get('impact', 'Médio')) if r.get('impact') in imp_options else 1
+                            e_imp = st.selectbox("Impacto", imp_options, index=curr_imp_idx, key=f"e_r_imp_{r['id']}")
+                            
+                            e_mitig = st.text_area("Plano de Mitigação", value=r.get('mitigation', ''), key=f"e_r_mitig_{r['id']}")
+                            
+                            if st.button("Salvar Alterações", key=f"btn_risk_edit_{r['id']}"):
+                                if e_desc.strip():
+                                    try:
+                                        supabase.table('risk_matrix').update({
+                                            "description": e_desc,
+                                            "probability": e_prob,
+                                            "impact": e_imp,
+                                            "mitigation": e_mitig
+                                        }).eq('id', r['id']).execute()
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro ao salvar alterações: {e}")
+                                else:
+                                    st.error("A descrição é obrigatória.")
 
-                            e_plan = st.text_area("Como Corrigir", value=r.get('correction_plan', ''))
-
-                            col_save, _ = st.columns(2)
-                            with col_save:
-                                if st.form_submit_button("💾 Salvar Alterações"):
-                                    if e_desc.strip():
-                                        try:
-                                            new_p_val = int(e_prob.split(" - ")[0])
-                                            new_i_val = int(e_imp.split(" - ")[0])
-                                            new_score = new_p_val * new_i_val
-
-                                            supabase.table('risk_matrix').update({
-                                                "risk_description": e_desc,
-                                                "risk_type": e_type,
-                                                "probability": e_prob,
-                                                "impact": e_imp,
-                                                "risk_score": new_score,
-                                                "strategy": e_strat,
-                                                "correction_plan": e_plan,
-                                                "risk_owner": e_owner,
-                                                "periodicity": e_period
-                                            }).eq('id', r['id']).execute()
-                                            st.success("Risco atualizado com sucesso!")
-                                            st.rerun()
-                                        except Exception as e:
-                                            st.error(f"Erro ao atualizar: {e}")
-                                    else:
-                                        st.error("A descrição do risco é obrigatória.")
-
+                with c_del:
+                    if can_delete_items(user_info):
                         if st.button("🗑️ Excluir Risco", key=f"btn_risk_del_{r['id']}", type="primary"):
                             try:
                                 supabase.table('risk_matrix').delete().eq('id', r['id']).execute()
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Erro ao excluir: {e}")
+                
+                st.divider()
+    except Exception as e:
+        st.error(f"Erro ao carregar Matriz de Risco: {e}")

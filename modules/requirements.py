@@ -2,7 +2,7 @@ import streamlit as st
 from config.database import supabase
 from config.ai_config import generate_istqb_content
 from utils.export import export_to_csv, export_to_markdown
-from utils.permissions import can_create, can_edit, can_delete_itens
+from utils.permissions import can_create, can_edit, can_delete_items
 
 def render_requirements_module():
     st.header("📋 QA & Requisitos Hub - Gerenciamento de Requisitos e Riscos")

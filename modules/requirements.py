@@ -2,7 +2,7 @@ import streamlit as st
 from config.database import supabase
 from config.ai_config import generate_istqb_content
 from utils.export import export_to_csv, export_to_markdown
-from utils.permissions import can_create, can_edit
+from utils.permissions import can_create, can_edit, can_delete_itens
 
 def render_requirements_module():
     st.header("📋 QA & Requisitos Hub - Gerenciamento de Requisitos e Riscos")
@@ -156,12 +156,13 @@ def render_requirements_module():
                                     st.error("O nome é obrigatório.")
 
                     with c_del:
-                        if st.button("🗑️ Excluir Persona", key=f"btn_p_del_{p['id']}", type="primary"):
-                            try:
-                                supabase.table('personas').delete().eq('id', p['id']).execute()
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Erro ao excluir: {e}")
+                        if can_delete_items(user_info):
+                            if st.button("🗑️ Excluir Persona", key=f"btn_p_del_{p['id']}", type="primary"):
+                                try:
+                                    supabase.table('personas').delete().eq('id', p['id']).execute()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro ao excluir: {e}")
 
     # ------------------------------------------
     # ABA 2: HISTÓRIAS DE USUÁRIO
@@ -263,13 +264,13 @@ def render_requirements_module():
                                     st.error("O título é obrigatório.")
 
                     with c_del:
-                        if st.button("🗑️ Excluir User Story", key=f"btn_us_del_{us['id']}", type="primary"):
-                            try:
-                                supabase.table('user_stories').delete().eq('id', us['id']).execute()
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Erro ao excluir: {e}")
-
+                        if can_delete_items(user_info):
+                            if st.button("🗑️ Excluir User Story", key=f"btn_us_del_{us['id']}", type="primary"):
+                                try:
+                                    supabase.table('user_stories').delete().eq('id', us['id']).execute()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro ao excluir: {e}")
     # ------------------------------------------
     # ABA 3: MATRIZ DE RISCO
     # ------------------------------------------
@@ -483,10 +484,11 @@ def render_requirements_module():
                                 else:
                                     st.error("A descrição do risco é obrigatória.")
 
-                        # O botão de exclusão DEVE ficar FORA do st.form
-                        if st.button("🗑️ Excluir Risco", key=f"btn_risk_del_{r['id']}", type="primary"):
-                            try:
-                                supabase.table('risk_matrix').delete().eq('id', r['id']).execute()
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"Erro ao excluir: {e}")
+                        # O botão de exclusão fica protegido apenas para gestores/owners
+                        if can_delete_items(user_info): # <-- Trava aplicada aqui
+                            if st.button("🗑️ Excluir Risco", key=f"btn_risk_del_{r['id']}", type="primary"):
+                                try:
+                                    supabase.table('risk_matrix').delete().eq('id', r['id']).execute()
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"Erro ao excluir: {e}")

@@ -1,5 +1,6 @@
 import pandas as pd
-
+import base64
+import plotly.io as pio
 
 def export_to_csv(data: list[dict]) -> str:
     """Converte a lista em formato CSV (compatível com Excel)."""
@@ -268,10 +269,6 @@ def export_to_html(data: list[dict], title: str = "Relatório", is_bug_report: b
 </body>
 </html>
 """
-    return html_content
-
-import plotly.io as pio
-
 
 def export_metrics_to_html(
     scope_label: str,
@@ -292,39 +289,45 @@ def export_metrics_to_html(
     fig_type=None,
     fig_risks=None,
 ) -> str:
-    """Gera um relatório executivo de métricas em HTML incluindo todos os gráficos renderizados."""
+    """Gera um relatório executivo de métricas em HTML com gráficos totalmente incorporados."""
 
     rate_color = "#2E7D32" if rate >= 80 else ("#ED6C02" if rate >= 60 else "#D32F2F")
     bugs_color = "#D32F2F" if bugs_open > 0 else "#2E7D32"
 
-    # Função auxiliar para converter figuras Plotly em HTML/SVG inline
-    def fig_to_html_svg(fig):
+    def fig_to_html_div(fig):
         if fig is None:
-            return ""
+            return '<div class="graph-box" style="display:flex;align-items:center;justify-content:center;height:250px;color:#A0AEC0;">Sem dados para exibir</div>'
         try:
-            # Converte a figura Plotly para SVG incorporado
-            svg_str = pio.to_html(
+            # 1. Tenta converter via Plotly Div sem duplicar a biblioteca
+            div_html = pio.to_html(
                 fig,
-                include_plotlyjs="cdn",
+                include_plotlyjs=False,
                 full_html=False,
                 config={"responsive": True, "displayModeBar": False},
             )
-            return f'<div class="graph-box">{svg_str}</div>'
+            return f'<div class="graph-box">{div_html}</div>'
         except Exception:
-            return '<p style="color: #A0AEC0; font-size: 12px;">(Gráfico não disponível)</p>'
+            try:
+                # 2. Fallback: Converte em Imagem SVG estática em Base64 (100% offline e à prova de falhas)
+                img_bytes = pio.to_image(fig, format="svg")
+                b64_img = base64.b64encode(img_bytes).decode("utf-8")
+                return f'<div class="graph-box"><img src="data:image/svg+xml;base64,{b64_img}" style="width:100%;height:auto;"/></div>'
+            except Exception as e:
+                return f'<div class="graph-box" style="color:#E53E3E;padding:20px;">Não foi possível renderizar o gráfico ({e})</div>'
 
-    html_fig_tc = fig_to_html_svg(fig_tc)
-    html_fig_bugs = fig_to_html_svg(fig_bugs)
-    html_fig_status = fig_to_html_svg(fig_status)
-    html_fig_type = fig_to_html_svg(fig_type)
-    html_fig_risks = fig_to_html_svg(fig_risks)
+    html_fig_tc = fig_to_html_div(fig_tc)
+    html_fig_bugs = fig_to_html_div(fig_bugs)
+    html_fig_status = fig_to_html_div(fig_status)
+    html_fig_type = fig_to_html_div(fig_type)
+    html_fig_risks = fig_to_html_div(fig_risks) if fig_risks is not None else ""
 
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Relatório Executivo de QA - {scope_label}</title>
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         :root {{
             --bg-color: #F8F9FA;
@@ -357,7 +360,7 @@ def export_metrics_to_html(
             color: var(--text-color);
             background-color: var(--bg-color);
             padding: 30px;
-            max-width: 950px;
+            max-width: 1000px;
             margin: 0 auto;
             line-height: 1.6;
         }}
@@ -424,6 +427,8 @@ def export_metrics_to_html(
             border-radius: 8px;
             padding: 10px;
             box-shadow: 0 2px 4px var(--card-shadow);
+            overflow: hidden;
+            min-height: 300px;
         }}
         ul.detail-list {{ padding-left: 20px; margin: 0; }}
         ul.detail-list li {{ margin-bottom: 6px; font-size: 13.5px; }}
@@ -431,7 +436,8 @@ def export_metrics_to_html(
         
         @media print {{
             body {{ padding: 0; background: #FFF; color: #000; }}
-            .charts-grid {{ page-break-inside: avoid; }}
+            .charts-grid {{ page-break-inside: avoid; display: block; }}
+            .graph-box {{ page-break-inside: avoid; margin-bottom: 15px; }}
         }}
     </style>
 </head>
@@ -477,7 +483,7 @@ def export_metrics_to_html(
         {html_fig_type}
     </div>
 
-    {"<div class='graph-box' style='margin-bottom: 20px;'>" + html_fig_risks + "</div>" if html_fig_risks else ""}
+    {f'<div style="margin-bottom: 20px;">{html_fig_risks}</div>' if html_fig_risks else ""}
 
     <div class="section-card">
         <h2 class="section-title">📋 Resumo de Execução do Escopo</h2>

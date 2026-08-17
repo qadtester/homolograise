@@ -342,7 +342,6 @@ def render_test_cases_tab(project_id: str):
                                         except Exception as e:
                                             st.error(f"Erro ao resetar status: {e}")
 
-
 # ==========================================
 # ABA 2: BUG REPORTS (ISTQB / IEEE 829)
 # ==========================================
@@ -442,7 +441,7 @@ def render_bug_reports_tab(project_id: str):
     st.divider()
     
     # --- FILTROS DE BUGS ---
-    col_bf1, col_bf2 = st.columns(2)
+    col_bf1, col_bf2, col_bf3 = st.columns(3)
     with col_bf1:
         try:
             existing_bug_cycles_res = supabase.table("bug_reports").select("test_cycle").eq("project_id", project_id).execute()
@@ -455,6 +454,9 @@ def render_bug_reports_tab(project_id: str):
     
     with col_bf2:
         bug_status_filter = st.selectbox("Filtrar por Status do Bug:", ["Todos", "Aberto", "Em correção", "Pronto para Teste", "Passou", "Fechado"], key="bug_status_filter_select")
+
+    with col_bf3:
+        bug_severity_filter = st.selectbox("Filtrar por Severidade:", ["Todos", "Baixa", "Média", "Alta", "Crítica"], key="bug_severity_filter_select")
     
     try:
         b_query = supabase.table("bug_reports").select("*").eq("project_id", project_id)
@@ -462,6 +464,8 @@ def render_bug_reports_tab(project_id: str):
             b_query = b_query.eq("test_cycle", bug_cycle_filter)
         if bug_status_filter != "Todos":
             b_query = b_query.eq("status", bug_status_filter)
+        if bug_severity_filter != "Todos":
+            b_query = b_query.eq("severity", bug_severity_filter)
             
         bugs = b_query.execute().data or []
     except Exception as e:
@@ -483,7 +487,7 @@ def render_bug_reports_tab(project_id: str):
                 key="btn_dl_bug_csv"
             )
         with col_bdl2:
-            md_bugs = export_to_markdown(bugs, title=f"Relatório de Bugs - Ciclo: {bug_cycle_filter}")
+            md_bugs = export_to_markdown(bugs, title=f"Relatório de Bugs - Ciclo: {bug_cycle_filter}", is_bug_report=True)
             st.download_button(
                 label="📥 Baixar Bugs (Markdown)",
                 data=md_bugs,
@@ -492,7 +496,7 @@ def render_bug_reports_tab(project_id: str):
                 key="btn_dl_bug_md"
             )
         with col_bdl3:
-            html_bugs = export_to_html(bugs, title=f"Relatório de Bugs - Ciclo: {bug_cycle_filter}")
+            html_bugs = export_to_html(bugs, title=f"Relatório de Bugs - Ciclo: {bug_cycle_filter}", is_bug_report=True)
             st.download_button(
                 label="🌐 Baixar Bugs (Visual do App)",
                 data=html_bugs.encode("utf-8"),

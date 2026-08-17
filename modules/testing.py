@@ -171,7 +171,6 @@ def render_test_cases_tab(project_id: str):
     with col_f2:
         filter_type = st.selectbox("Filtrar por Tipo:", ["Todos"] + TEST_TYPES, key="tc_filter_select")
     with col_f3:
-        # NOVO FILTRO DE STATUS
         filter_status = st.selectbox(
             "Filtrar por Status:", 
             ["Todos", "Não Executado", "Passou", "Falhou", "Bloqueado"], 
@@ -304,36 +303,36 @@ def render_test_cases_tab(project_id: str):
                                     st.caption("🔒 Exclusão restrita")
 
                         with col_act:
-            st.write(f"**Status:** {status}")
-            st.write("**Executar Ciclo:**")
-            if can_edit(user_info):
-                if st.button("🟢 Passou", key=f"p_{tc['id']}", use_container_width=True):
-                    try:
-                        supabase.table("test_cases").update({"status": "Passou"}).eq("id", tc['id']).execute()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
-                if st.button("🔴 Falhou", key=f"f_{tc['id']}", use_container_width=True):
-                    try:
-                        supabase.table("test_cases").update({"status": "Falhou"}).eq("id", tc['id']).execute()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
-                if st.button("🟡 Bloqueado", key=f"b_{tc['id']}", use_container_width=True):
-                    try:
-                        supabase.table("test_cases").update({"status": "Bloqueado"}).eq("id", tc['id']).execute()
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Erro: {e}")
-                        
-                # NOVO BOTÃO DE REVERSÃO
-                if status != "Não Executado":
-                    if st.button("⚪ Resetar (Não Executado)", key=f"r_{tc['id']}", use_container_width=True):
-                        try:
-                            supabase.table("test_cases").update({"status": "Não Executado"}).eq("id", tc['id']).execute()
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Erro ao resetar status: {e}")
+                            st.write(f"**Status:** {status}")
+                            st.write("**Executar Ciclo:**")
+                            if can_edit(user_info):
+                                if st.button("🟢 Passou", key=f"p_{tc['id']}", use_container_width=True):
+                                    try:
+                                        supabase.table("test_cases").update({"status": "Passou"}).eq("id", tc['id']).execute()
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro: {e}")
+                                if st.button("🔴 Falhou", key=f"f_{tc['id']}", use_container_width=True):
+                                    try:
+                                        supabase.table("test_cases").update({"status": "Falhou"}).eq("id", tc['id']).execute()
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro: {e}")
+                                if st.button("🟡 Bloqueado", key=f"b_{tc['id']}", use_container_width=True):
+                                    try:
+                                        supabase.table("test_cases").update({"status": "Bloqueado"}).eq("id", tc['id']).execute()
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro: {e}")
+                                        
+                                if status != "Não Executado":
+                                    if st.button("⚪ Resetar (Não Executado)", key=f"r_{tc['id']}", use_container_width=True):
+                                        try:
+                                            supabase.table("test_cases").update({"status": "Não Executado"}).eq("id", tc['id']).execute()
+                                            st.rerun()
+                                        except Exception as e:
+                                            st.error(f"Erro ao resetar status: {e}")
+
 
 # ==========================================
 # ABA 2: BUG REPORTS (ISTQB / IEEE 829)

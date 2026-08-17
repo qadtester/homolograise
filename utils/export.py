@@ -269,3 +269,177 @@ def export_to_html(data: list[dict], title: str = "Relatório", is_bug_report: b
 </html>
 """
     return html_content
+
+
+def export_metrics_to_html(
+    scope_label: str,
+    total_tc: int,
+    passed_tc: int,
+    failed_tc: int,
+    blocked_tc: int,
+    unexecuted_tc: int,
+    rate: float,
+    coverage_rate: float,
+    bugs_total: int,
+    bugs_open: int,
+    bugs_closed: int,
+    high_risks: int,
+    total_stories: int,
+    analysis_text: str,
+) -> str:
+    """Converte o Dashboard Executivo de Métricas em um relatório HTML completo e elegante."""
+    rate_color = "#198754" if rate >= 80 else ("#FFC107" if rate >= 60 else "#DC3545")
+    bugs_color = "#DC3545" if bugs_open > 0 else "#198754"
+
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Relatório Executivo de QA - {scope_label}</title>
+    <style>
+        :root {{
+            --bg-color: #F0F2F6;
+            --text-color: #31333F;
+            --title-color: #0E1117;
+            --card-bg: #FFFFFF;
+            --card-border: #E6E8EB;
+            --card-shadow: rgba(0, 0, 0, 0.05);
+            --primary-color: #0D6EFD;
+            --badge-bg: #EAECEF;
+            --badge-text: #0E1117;
+            --block-bg: #F8F9FA;
+            --block-text: #262730;
+        }}
+
+        @media (prefers-color-scheme: dark) {{
+            :root {{
+                --bg-color: #0E1117;
+                --text-color: #DBDBDB;
+                --title-color: #FAFAFA;
+                --card-bg: #262730;
+                --card-border: #31333F;
+                --card-shadow: rgba(0, 0, 0, 0.3);
+                --primary-color: #4D96FF;
+                --badge-bg: #1A1C24;
+                --badge-text: #4D96FF;
+                --block-bg: #1A1C24;
+                --block-text: #E0E0E0;
+            }}
+        }}
+
+        body {{
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: var(--text-color);
+            background-color: var(--bg-color);
+            padding: 30px;
+            max-width: 950px;
+            margin: 0 auto;
+            line-height: 1.6;
+        }}
+        .header {{
+            border-bottom: 2px solid var(--primary-color);
+            padding-bottom: 15px;
+            margin-bottom: 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }}
+        .header h1 {{ margin: 0; font-size: 24px; color: var(--title-color); }}
+        .badge-scope {{
+            background: var(--primary-color);
+            color: #FFF;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }}
+        .kpi-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }}
+        .kpi-card {{
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 16px;
+            text-align: center;
+            box-shadow: 0 4px 6px var(--card-shadow);
+        }}
+        .kpi-title {{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; font-weight: 600; }}
+        .kpi-value {{ font-size: 28px; font-weight: 700; margin: 8px 0; color: var(--primary-color); }}
+        .section-card {{
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px var(--card-shadow);
+        }}
+        .section-title {{ font-size: 18px; margin-top: 0; margin-bottom: 15px; color: var(--title-color); }}
+        .analysis-content {{
+            white-space: pre-wrap;
+            background: var(--block-bg);
+            color: var(--block-text);
+            padding: 16px;
+            border-left: 4px solid var(--primary-color);
+            border-radius: 4px;
+            font-size: 14px;
+        }}
+        ul.detail-list {{ padding-left: 20px; margin: 0; }}
+        ul.detail-list li {{ margin-bottom: 8px; font-size: 14px; }}
+        .footer {{ text-align: center; font-size: 12px; opacity: 0.6; margin-top: 35px; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📊 Relatório Executivo de Qualidade (QA)</h1>
+        <span class="badge-scope">{scope_label}</span>
+    </div>
+
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-title">Taxa de Sucesso</div>
+            <div class="kpi-value" style="color: {rate_color};">{rate:.1f}%</div>
+            <small>{passed_tc} de {total_tc} testes aprovados</small>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Cobertura de Requisitos</div>
+            <div class="kpi-value">{coverage_rate:.1f}%</div>
+            <small>{total_stories} User Stories totais</small>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Bugs Pendentes</div>
+            <div class="kpi-value" style="color: {bugs_color};">{bugs_open}</div>
+            <small>{bugs_total} bugs no total</small>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Riscos Críticos</div>
+            <div class="kpi-value">{high_risks}</div>
+            <small>Score &ge; 15 na Matriz</small>
+        </div>
+    </div>
+
+    <div class="section-card">
+        <h2 class="section-title">🤖 Parecer Executivo de Qualidade</h2>
+        <div class="analysis-content">{analysis_text}</div>
+    </div>
+
+    <div class="section-card">
+        <h2 class="section-title">📋 Métricas Detalhadas do Escopo</h2>
+        <ul class="detail-list">
+            <li><b>Total de Casos de Teste Mapeados:</b> {total_tc}</li>
+            <li><b>Aprovados (Passou):</b> {passed_tc}</li>
+            <li><b>Falharam:</b> {failed_tc}</li>
+            <li><b>Bloqueados:</b> {blocked_tc}</li>
+            <li><b>Não Executados / Pendentes:</b> {unexecuted_tc}</li>
+            <li><b>Bugs Resolvidos/Fechados:</b> {bugs_closed}</li>
+        </ul>
+    </div>
+
+    <div class="footer">
+        Gerado automaticamente pela Plataforma QA & Requisitos Hub
+    </div>
+</body>
+</html>"""

@@ -2,7 +2,7 @@ import pandas as pd
 
 
 def export_to_csv(data: list[dict]) -> str:
-    """Converte uma lista de dicionários em uma string formato CSV (compatível com Excel)."""
+    """Converte a lista em formato CSV (compatível com Excel)."""
     if not data:
         return ""
 
@@ -10,48 +10,62 @@ def export_to_csv(data: list[dict]) -> str:
     return df.to_csv(index=False, sep=";", encoding="utf-8-sig")
 
 
-def export_to_markdown(data: list[dict], title: str = "Relatório") -> str:
-    """Converte uma lista de dicionários em formato Markdown estruturado por cards.
-
-    Evita quebras de tabela ao lidar com textos multilinhas.
-    """
+def export_to_markdown(data: list[dict], title: str = "Relatório", is_bug_report: bool = False) -> str:
+    """Converte em Markdown estruturado."""
     if not data:
         return f"# {title}\n\n*Nenhum dado disponível.*"
 
     md_content = f"# {title}\n\n"
 
-    for item in data:
-        status = item.get("status", "Não Executado")
-        status_icon = (
-            "🟢"
-            if status == "Passou"
-            else ("🔴" if status == "Falhou" else ("🟡" if status == "Bloqueado" else "⚪"))
-        )
+    if is_bug_report:
+        for bug in data:
+            sev = bug.get("severity", "Média")
+            sev_color = "🔴" if sev in ["Alta", "Crítica"] else ("🟡" if sev == "Média" else "🟢")
+            bug_title = bug.get("title", "")
+            status = bug.get("status", "Aberto")
+            cycle = bug.get("test_cycle", "Sem Ciclo")
+            description = bug.get("description") or "N/A"
+            steps = bug.get("steps") or "N/A"
+            expected = bug.get("expected_behavior") or "N/A"
+            actual = bug.get("actual_behavior") or "N/A"
 
-        test_type = item.get("test_type", "Funcional")
-        tc_title = item.get("title", "")
-        cycle = item.get("test_cycle", "Sem Ciclo")
-        preconditions = item.get("preconditions") or "N/A"
-        steps = item.get("steps") or "N/A"
-        expected = item.get("expected_result") or "N/A"
+            md_content += f"### {sev_color} [{sev}] {bug_title} - Status: `{status}`\n"
+            md_content += f"- **Ciclo / Release:** `{cycle}`\n\n"
+            md_content += f"**Descrição:**\n\n{description}\n\n"
+            md_content += f"**Passos para Reproduzir:**\n\n{steps}\n\n"
+            md_content += f"**Comportamento Esperado:** {expected}\n\n"
+            md_content += f"**Comportamento Atual:** {actual}\n\n"
+            md_content += "---\n\n"
+    else:
+        for item in data:
+            status = item.get("status", "Não Executado")
+            status_icon = (
+                "🟢"
+                if status == "Passou"
+                else ("🔴" if status == "Falhou" else ("🟡" if status == "Bloqueado" else "⚪"))
+            )
 
-        md_content += f"### {status_icon} [{test_type}] - {tc_title}\n"
-        md_content += f"- **Tipo:** `{test_type}`\n"
-        md_content += f"- **Ciclo:** `{cycle}`\n"
-        md_content += f"- **Pré-condições:** {preconditions}\n\n"
-        md_content += f"**Passos:**\n\n{steps}\n\n"
-        md_content += f"**Resultado Esperado:**\n\n{expected}\n\n"
-        md_content += "---\n\n"
+            test_type = item.get("test_type", "Funcional")
+            tc_title = item.get("title", "")
+            cycle = item.get("test_cycle", "Sem Ciclo")
+            preconditions = item.get("preconditions") or "N/A"
+            steps = item.get("steps") or "N/A"
+            expected = item.get("expected_result") or "N/A"
+
+            md_content += f"### {status_icon} [{test_type}] - {tc_title}\n"
+            md_content += f"- **Tipo:** `{test_type}`\n"
+            md_content += f"- **Ciclo:** `{cycle}`\n"
+            md_content += f"- **Pré-condições:** {preconditions}\n\n"
+            md_content += f"**Passos:**\n\n{steps}\n\n"
+            md_content += f"**Resultado Esperado:**\n\n{expected}\n\n"
+            md_content += "---\n\n"
 
     md_content += "*Gerado automaticamente pelo QA & Requisitos Hub*"
     return md_content
 
 
-def export_to_html(data: list[dict], title: str = "Relatório") -> str:
-    """Converte a lista de casos de teste em um arquivo HTML estilizado
-
-    Suporta automaticamente Dark Mode e Light Mode com base nas preferências do dispositivo/navegador.
-    """
+def export_to_html(data: list[dict], title: str = "Relatório", is_bug_report: bool = False) -> str:
+    """Converte em HTML idêntico à tela do software (com suporte automático a Dark/Light mode)."""
     if not data:
         return f"<html><body><h2>{title}</h2><p>Nenhum dado disponível.</p></body></html>"
 
@@ -61,7 +75,6 @@ def export_to_html(data: list[dict], title: str = "Relatório") -> str:
     <meta charset="UTF-8">
     <title>{title}</title>
     <style>
-        /* === TEMA LIGHT (PADRÃO) === */
         :root {{
             --bg-color: #F0F2F6;
             --text-color: #31333F;
@@ -78,7 +91,6 @@ def export_to_html(data: list[dict], title: str = "Relatório") -> str:
             --label-color: #0E1117;
         }}
 
-        /* === TEMA DARK (AUTOMÁTICO SE O NAVEGADOR/OS ESTIVER EM DARK MODE) === */
         @media (prefers-color-scheme: dark) {{
             :root {{
                 --bg-color: #0E1117;
@@ -104,7 +116,6 @@ def export_to_html(data: list[dict], title: str = "Relatório") -> str:
             padding: 30px;
             max-width: 900px;
             margin: 0 auto;
-            transition: background-color 0.3s, color 0.3s;
         }}
         h2 {{
             color: var(--title-color);
@@ -164,22 +175,65 @@ def export_to_html(data: list[dict], title: str = "Relatório") -> str:
     <h2>{title}</h2>
 """
 
-    for item in data:
-        status = item.get("status", "Não Executado")
-        status_icon = (
-            "🟢"
-            if status == "Passou"
-            else ("🔴" if status == "Falhou" else ("🟡" if status == "Bloqueado" else "⚪"))
-        )
+    if is_bug_report:
+        for bug in data:
+            sev = bug.get("severity", "Média")
+            sev_color = "🔴" if sev in ["Alta", "Crítica"] else ("🟡" if sev == "Média" else "🟢")
+            bug_title = bug.get("title", "")
+            status = bug.get("status", "Aberto")
+            cycle = bug.get("test_cycle", "Sem Ciclo")
+            description = bug.get("description") or "N/A"
+            steps = bug.get("steps") or "N/A"
+            expected = bug.get("expected_behavior") or "N/A"
+            actual = bug.get("actual_behavior") or "N/A"
 
-        test_type = item.get("test_type", "Funcional")
-        tc_title = item.get("title", "")
-        cycle = item.get("test_cycle", "Sem Ciclo")
-        preconditions = item.get("preconditions") or "N/A"
-        steps = item.get("steps") or "N/A"
-        expected = item.get("expected_result") or "N/A"
+            html_content += f"""
+    <div class="card">
+        <div class="card-header">
+            <span>{sev_color}</span>
+            <span>[{sev}] {bug_title} - Status: <span class="badge">{status}</span></span>
+        </div>
 
-        html_content += f"""
+        <div class="field">
+            <span class="bold">Ciclo / Release:</span> <span class="badge">{cycle}</span>
+        </div>
+
+        <div class="field">
+            <span class="bold">Descrição:</span>
+            <div class="content-block">{description}</div>
+        </div>
+
+        <div class="field">
+            <span class="bold">Passos para Reproduzir:</span>
+            <div class="content-block">{steps}</div>
+        </div>
+
+        <div class="field">
+            <span class="bold">Comportamento Esperado:</span> {expected}
+        </div>
+
+        <div class="field">
+            <span class="bold">Comportamento Atual:</span> {actual}
+        </div>
+    </div>
+"""
+    else:
+        for item in data:
+            status = item.get("status", "Não Executado")
+            status_icon = (
+                "🟢"
+                if status == "Passou"
+                else ("🔴" if status == "Falhou" else ("🟡" if status == "Bloqueado" else "⚪"))
+            )
+
+            test_type = item.get("test_type", "Funcional")
+            tc_title = item.get("title", "")
+            cycle = item.get("test_cycle", "Sem Ciclo")
+            preconditions = item.get("preconditions") or "N/A"
+            steps = item.get("steps") or "N/A"
+            expected = item.get("expected_result") or "N/A"
+
+            html_content += f"""
     <div class="card">
         <div class="card-header">
             <span>{status_icon}</span>

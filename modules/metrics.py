@@ -18,6 +18,13 @@ def render_metrics_dashboard(
     df_bugs = pd.DataFrame(bug_reports)
     df_risks = pd.DataFrame(risk_matrix)
 
+    # Inicialização das variáveis de gráfico (evita UnboundLocalError e envio como None)
+    fig_tc = None
+    fig_bugs = None
+    fig_bug_status = None
+    fig_type = None
+    fig_risks = None
+
     # ------------------------------------------
     # 0. FILTRO DE ESCOPO (GERAL vs CICLO / RELEASE)
     # ------------------------------------------
@@ -136,7 +143,7 @@ def render_metrics_dashboard(
     st.divider()
 
     # ------------------------------------------
-    # 2. KPIS PRINCIPAIS (CORES SUAVES)
+    # 2. KPIS PRINCIPAIS
     # ------------------------------------------
     st.subheader(f"🚀 Indicadores Chave (KPIs)")
     
@@ -151,26 +158,25 @@ def render_metrics_dashboard(
     st.markdown("---")
 
     # ------------------------------------------
-    # 3. PAINEL GRÁFICO (PALETA PASTEL / SOFT)
+    # 3. PAINEL GRÁFICO
     # ------------------------------------------
     st.subheader("📈 Visualização Geral de Qualidade")
 
     g1, g2 = st.columns(2)
     
-    # Paleta de Cores Pastel / Soft
     soft_tc_colors = {
-        "Passou": "#48BB78",        # Verde suave
-        "Falhou": "#F56565",        # Vermelho suave
-        "Bloqueado": "#ECC94B",     # Amarelo suave
-        "Não Executado": "#CBD5E0",  # Cinza claro
-        "Pendente": "#4299E1"       # Azul suave
+        "Passou": "#48BB78",
+        "Falhou": "#F56565",
+        "Bloqueado": "#ECC94B",
+        "Não Executado": "#CBD5E0",
+        "Pendente": "#4299E1"
     }
 
     soft_sev_colors = {
-        "Crítica": "#E53E3E",       # Vermelho escuro
-        "Alta": "#ED8936",          # Laranja pastel
-        "Média": "#ECC94B",         # Amarelo pastel
-        "Baixa": "#48BB78"          # Verde pastel
+        "Crítica": "#E53E3E",
+        "Alta": "#ED8936",
+        "Média": "#ECC94B",
+        "Baixa": "#48BB78"
     }
 
     with g1:
@@ -290,7 +296,7 @@ def render_metrics_dashboard(
 
     exp1, exp2, exp3 = st.columns(3)
 
-    # 1. Exportação HTML
+    # 1. Exportação HTML com Gráficos Incorporados
     with exp1:
         html_report = export_metrics_to_html(
             scope_label=selected_cycle,
@@ -304,7 +310,12 @@ def render_metrics_dashboard(
             bugs_open=bugs_open,
             bugs_closed=bugs_closed,
             high_risks=high_risks,
-            analysis_text=analysis_text
+            analysis_text=analysis_text,
+            fig_tc=fig_tc,             # 👈 PASSANDO OS OBJETOS DE GRÁFICO
+            fig_bugs=fig_bugs,         # 👈 PASSANDO OS OBJETOS DE GRÁFICO
+            fig_status=fig_bug_status, # 👈 PASSANDO OS OBJETOS DE GRÁFICO
+            fig_type=fig_type,         # 👈 PASSANDO OS OBJETOS DE GRÁFICO
+            fig_risks=fig_risks        # 👈 PASSANDO OS OBJETOS DE GRÁFICO
         )
         st.download_button(
             label="🌐 Baixar Relatório (HTML/PDF)",

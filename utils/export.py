@@ -270,7 +270,6 @@ def export_to_html(data: list[dict], title: str = "Relatório", is_bug_report: b
 """
     return html_content
 
-
 def export_metrics_to_html(
     scope_label: str,
     total_tc: int,
@@ -279,17 +278,17 @@ def export_metrics_to_html(
     blocked_tc: int,
     unexecuted_tc: int,
     rate: float,
-    coverage_rate: float,
     bugs_total: int,
     bugs_open: int,
     bugs_closed: int,
     high_risks: int,
-    total_stories: int,
     analysis_text: str,
 ) -> str:
-    """Converte o Dashboard Executivo de Métricas em um relatório HTML completo e elegante."""
-    rate_color = "#198754" if rate >= 80 else ("#FFC107" if rate >= 60 else "#DC3545")
-    bugs_color = "#DC3545" if bugs_open > 0 else "#198754"
+    """Gera um relatório executivo de métricas em HTML estilizado com cores suaves e elegantes."""
+    
+    # Cores suaves para o HTML
+    rate_color = "#2E7D32" if rate >= 80 else ("#ED6C02" if rate >= 60 else "#D32F2F")
+    bugs_color = "#D32F2F" if bugs_open > 0 else "#2E7D32"
 
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -298,32 +297,28 @@ def export_metrics_to_html(
     <title>Relatório Executivo de QA - {scope_label}</title>
     <style>
         :root {{
-            --bg-color: #F0F2F6;
-            --text-color: #31333F;
-            --title-color: #0E1117;
+            --bg-color: #F8F9FA;
+            --text-color: #2D3748;
+            --title-color: #1A202C;
             --card-bg: #FFFFFF;
-            --card-border: #E6E8EB;
-            --card-shadow: rgba(0, 0, 0, 0.05);
-            --primary-color: #0D6EFD;
-            --badge-bg: #EAECEF;
-            --badge-text: #0E1117;
-            --block-bg: #F8F9FA;
-            --block-text: #262730;
+            --card-border: #E2E8F0;
+            --card-shadow: rgba(0, 0, 0, 0.03);
+            --primary-color: #3182CE;
+            --primary-bg-light: #EBF8FF;
+            --block-bg: #EDF2F7;
         }}
 
         @media (prefers-color-scheme: dark) {{
             :root {{
-                --bg-color: #0E1117;
-                --text-color: #DBDBDB;
-                --title-color: #FAFAFA;
-                --card-bg: #262730;
-                --card-border: #31333F;
-                --card-shadow: rgba(0, 0, 0, 0.3);
-                --primary-color: #4D96FF;
-                --badge-bg: #1A1C24;
-                --badge-text: #4D96FF;
-                --block-bg: #1A1C24;
-                --block-text: #E0E0E0;
+                --bg-color: #12161A;
+                --text-color: #CBD5E0;
+                --title-color: #F7FAFC;
+                --card-bg: #1A202C;
+                --card-border: #2D3748;
+                --card-shadow: rgba(0, 0, 0, 0.2);
+                --primary-color: #63B3ED;
+                --primary-bg-light: #1A2634;
+                --block-bg: #2D3748;
             }}
         }}
 
@@ -339,23 +334,24 @@ def export_metrics_to_html(
         .header {{
             border-bottom: 2px solid var(--primary-color);
             padding-bottom: 15px;
-            margin-bottom: 30px;
+            margin-bottom: 25px;
             display: flex;
             justify-content: space-between;
             align-items: center;
         }}
-        .header h1 {{ margin: 0; font-size: 24px; color: var(--title-color); }}
+        .header h1 {{ margin: 0; font-size: 22px; color: var(--title-color); font-weight: 600; }}
         .badge-scope {{
-            background: var(--primary-color);
-            color: #FFF;
-            padding: 6px 14px;
-            border-radius: 20px;
+            background: var(--primary-bg-light);
+            color: var(--primary-color);
+            border: 1px solid var(--primary-color);
+            padding: 5px 12px;
+            border-radius: 16px;
             font-size: 13px;
-            font-weight: 600;
+            font-weight: 500;
         }}
         .kpi-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 15px;
             margin-bottom: 25px;
         }}
@@ -365,31 +361,30 @@ def export_metrics_to_html(
             border-radius: 8px;
             padding: 16px;
             text-align: center;
-            box-shadow: 0 4px 6px var(--card-shadow);
+            box-shadow: 0 2px 4px var(--card-shadow);
         }}
-        .kpi-title {{ font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; font-weight: 600; }}
-        .kpi-value {{ font-size: 28px; font-weight: 700; margin: 8px 0; color: var(--primary-color); }}
+        .kpi-title {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.75; font-weight: 600; }}
+        .kpi-value {{ font-size: 26px; font-weight: 700; margin: 6px 0; color: var(--primary-color); }}
         .section-card {{
             background: var(--card-bg);
             border: 1px solid var(--card-border);
             border-radius: 8px;
             padding: 20px;
             margin-bottom: 20px;
-            box-shadow: 0 4px 6px var(--card-shadow);
+            box-shadow: 0 2px 4px var(--card-shadow);
         }}
-        .section-title {{ font-size: 18px; margin-top: 0; margin-bottom: 15px; color: var(--title-color); }}
+        .section-title {{ font-size: 16px; margin-top: 0; margin-bottom: 12px; color: var(--title-color); font-weight: 600; }}
         .analysis-content {{
             white-space: pre-wrap;
             background: var(--block-bg);
-            color: var(--block-text);
-            padding: 16px;
-            border-left: 4px solid var(--primary-color);
+            padding: 14px;
+            border-left: 3px solid var(--primary-color);
             border-radius: 4px;
-            font-size: 14px;
+            font-size: 13.5px;
         }}
         ul.detail-list {{ padding-left: 20px; margin: 0; }}
-        ul.detail-list li {{ margin-bottom: 8px; font-size: 14px; }}
-        .footer {{ text-align: center; font-size: 12px; opacity: 0.6; margin-top: 35px; }}
+        ul.detail-list li {{ margin-bottom: 6px; font-size: 13.5px; }}
+        .footer {{ text-align: center; font-size: 12px; opacity: 0.5; margin-top: 30px; }}
     </style>
 </head>
 <body>
@@ -402,22 +397,22 @@ def export_metrics_to_html(
         <div class="kpi-card">
             <div class="kpi-title">Taxa de Sucesso</div>
             <div class="kpi-value" style="color: {rate_color};">{rate:.1f}%</div>
-            <small>{passed_tc} de {total_tc} testes aprovados</small>
+            <small>{passed_tc} de {total_tc} testes passados</small>
         </div>
         <div class="kpi-card">
-            <div class="kpi-title">Cobertura de Requisitos</div>
-            <div class="kpi-value">{coverage_rate:.1f}%</div>
-            <small>{total_stories} User Stories totais</small>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-title">Bugs Pendentes</div>
+            <div class="kpi-title">Bugs Abertos</div>
             <div class="kpi-value" style="color: {bugs_color};">{bugs_open}</div>
-            <small>{bugs_total} bugs no total</small>
+            <small>{bugs_total} bugs cadastrados</small>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-title">Testes Com Falha</div>
+            <div class="kpi-value" style="color: #D32F2F;">{failed_tc}</div>
+            <small>{blocked_tc} bloqueados / {unexecuted_tc} pendentes</small>
         </div>
         <div class="kpi-card">
             <div class="kpi-title">Riscos Críticos</div>
-            <div class="kpi-value">{high_risks}</div>
-            <small>Score &ge; 15 na Matriz</small>
+            <div class="kpi-value" style="color: #E53E3E;">{high_risks}</div>
+            <small>Score de Risco &ge; 15</small>
         </div>
     </div>
 
@@ -427,19 +422,19 @@ def export_metrics_to_html(
     </div>
 
     <div class="section-card">
-        <h2 class="section-title">📋 Métricas Detalhadas do Escopo</h2>
+        <h2 class="section-title">📋 Resumo de Execução do Escopo</h2>
         <ul class="detail-list">
-            <li><b>Total de Casos de Teste Mapeados:</b> {total_tc}</li>
+            <li><b>Total de Casos de Teste:</b> {total_tc}</li>
             <li><b>Aprovados (Passou):</b> {passed_tc}</li>
-            <li><b>Falharam:</b> {failed_tc}</li>
-            <li><b>Bloqueados:</b> {blocked_tc}</li>
-            <li><b>Não Executados / Pendentes:</b> {unexecuted_tc}</li>
-            <li><b>Bugs Resolvidos/Fechados:</b> {bugs_closed}</li>
+            <li><b>Falhas Detectadas:</b> {failed_tc}</li>
+            <li><b>Bloqueios de Execução:</b> {blocked_tc}</li>
+            <li><b>Pendentes de Execução:</b> {unexecuted_tc}</li>
+            <li><b>Bugs Resolvidos / Corrigidos:</b> {bugs_closed}</li>
         </ul>
     </div>
 
     <div class="footer">
-        Gerado automaticamente pela Plataforma QA & Requisitos Hub
+        Gerado pela plataforma QA & Requisitos Hub
     </div>
 </body>
 </html>"""

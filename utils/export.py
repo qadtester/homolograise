@@ -270,6 +270,9 @@ def export_to_html(data: list[dict], title: str = "Relatório", is_bug_report: b
 """
     return html_content
 
+import plotly.io as pio
+
+
 def export_metrics_to_html(
     scope_label: str,
     total_tc: int,
@@ -283,18 +286,45 @@ def export_metrics_to_html(
     bugs_closed: int,
     high_risks: int,
     analysis_text: str,
+    fig_tc=None,
+    fig_bugs=None,
+    fig_status=None,
+    fig_type=None,
+    fig_risks=None,
 ) -> str:
-    """Gera um relatório executivo de métricas em HTML estilizado com cores suaves e elegantes."""
-    
-    # Cores suaves para o HTML
+    """Gera um relatório executivo de métricas em HTML incluindo todos os gráficos renderizados."""
+
     rate_color = "#2E7D32" if rate >= 80 else ("#ED6C02" if rate >= 60 else "#D32F2F")
     bugs_color = "#D32F2F" if bugs_open > 0 else "#2E7D32"
+
+    # Função auxiliar para converter figuras Plotly em HTML/SVG inline
+    def fig_to_html_svg(fig):
+        if fig is None:
+            return ""
+        try:
+            # Converte a figura Plotly para SVG incorporado
+            svg_str = pio.to_html(
+                fig,
+                include_plotlyjs="cdn",
+                full_html=False,
+                config={"responsive": True, "displayModeBar": False},
+            )
+            return f'<div class="graph-box">{svg_str}</div>'
+        except Exception:
+            return '<p style="color: #A0AEC0; font-size: 12px;">(Gráfico não disponível)</p>'
+
+    html_fig_tc = fig_to_html_svg(fig_tc)
+    html_fig_bugs = fig_to_html_svg(fig_bugs)
+    html_fig_status = fig_to_html_svg(fig_status)
+    html_fig_type = fig_to_html_svg(fig_type)
+    html_fig_risks = fig_to_html_svg(fig_risks)
 
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <title>Relatório Executivo de QA - {scope_label}</title>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
     <style>
         :root {{
             --bg-color: #F8F9FA;
@@ -382,9 +412,27 @@ def export_metrics_to_html(
             border-radius: 4px;
             font-size: 13.5px;
         }}
+        .charts-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 20px;
+        }}
+        .graph-box {{
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 10px;
+            box-shadow: 0 2px 4px var(--card-shadow);
+        }}
         ul.detail-list {{ padding-left: 20px; margin: 0; }}
         ul.detail-list li {{ margin-bottom: 6px; font-size: 13.5px; }}
         .footer {{ text-align: center; font-size: 12px; opacity: 0.5; margin-top: 30px; }}
+        
+        @media print {{
+            body {{ padding: 0; background: #FFF; color: #000; }}
+            .charts-grid {{ page-break-inside: avoid; }}
+        }}
     </style>
 </head>
 <body>
@@ -420,6 +468,16 @@ def export_metrics_to_html(
         <h2 class="section-title">🤖 Parecer Executivo de Qualidade</h2>
         <div class="analysis-content">{analysis_text}</div>
     </div>
+
+    <h2 style="font-size: 18px; color: var(--title-color); margin-top: 25px; margin-bottom: 15px;">📈 Painel de Gráficos de Qualidade</h2>
+    <div class="charts-grid">
+        {html_fig_tc}
+        {html_fig_bugs}
+        {html_fig_status}
+        {html_fig_type}
+    </div>
+
+    {"<div class='graph-box' style='margin-bottom: 20px;'>" + html_fig_risks + "</div>" if html_fig_risks else ""}
 
     <div class="section-card">
         <h2 class="section-title">📋 Resumo de Execução do Escopo</h2>

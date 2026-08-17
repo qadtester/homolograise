@@ -3,7 +3,7 @@ import streamlit as st
 import datetime
 from config.database import supabase
 from config.ai_config import generate_istqb_content
-from utils.export import export_to_csv, export_to_markdown
+from utils.export import export_to_csv, export_to_markdown, export_to_html
 from utils.permissions import can_create, can_edit, can_delete_items
 
 TEST_TYPES = ["Funcional", "Regressão", "Smoke", "Não-Funcional"]
@@ -194,11 +194,11 @@ def render_test_cases_tab(project_id: str):
     if not test_cases:
         st.info("Nenhum caso de teste encontrado com os filtros selecionados.")
     else:
-        col_dl1, col_dl2 = st.columns(2)
+        col_dl1, col_dl2, col_dl3 = st.columns(3)
         with col_dl1:
             csv_data = export_to_csv(test_cases)
             st.download_button(
-                label="📥 Baixar Casos de Teste (CSV)",
+                label="📥 Baixar (CSV)",
                 data=csv_data.encode("utf-8-sig"),
                 file_name=f"casos_de_teste_{project_id[:8]}.csv",
                 mime="text/csv; charset=utf-8-sig",
@@ -207,11 +207,20 @@ def render_test_cases_tab(project_id: str):
         with col_dl2:
             md_data = export_to_markdown(test_cases, title=f"Casos de Teste - Ciclo: {filter_cycle}")
             st.download_button(
-                label="📥 Baixar Casos de Teste (Markdown)",
+                label="📥 Baixar (Markdown)",
                 data=md_data,
                 file_name=f"casos_de_teste_{project_id[:8]}.md",
                 mime="text/markdown",
                 key="btn_dl_tc_md"
+            )
+        with col_dl3:
+            html_data = export_to_html(test_cases, title=f"Casos de Teste - Ciclo: {filter_cycle}")
+            st.download_button(
+                label="🌐 Baixar (Visual do App)",
+                data=html_data.encode("utf-8"),
+                file_name=f"casos_de_teste_{project_id[:8]}.html",
+                mime="text/html",
+                key="btn_dl_tc_html"
             )
             
         st.markdown("---")
@@ -463,11 +472,11 @@ def render_bug_reports_tab(project_id: str):
         st.info("Nenhum bug registrado com estes filtros.")
     else:
         # --- EXPORTAÇÃO ---
-        col_bdl1, col_bdl2 = st.columns(2)
+        col_bdl1, col_bdl2, col_bdl3 = st.columns(3)
         with col_bdl1:
             csv_bugs = export_to_csv(bugs)
             st.download_button(
-                label="📥 Baixar Relatório de Bugs (CSV)",
+                label="📥 Baixar Bugs (CSV)",
                 data=csv_bugs.encode("utf-8-sig"),
                 file_name=f"bug_reports_{project_id[:8]}.csv",
                 mime="text/csv; charset=utf-8-sig",
@@ -476,11 +485,20 @@ def render_bug_reports_tab(project_id: str):
         with col_bdl2:
             md_bugs = export_to_markdown(bugs, title=f"Relatório de Bugs - Ciclo: {bug_cycle_filter}")
             st.download_button(
-                label="📥 Baixar Relatório de Bugs (Markdown)",
+                label="📥 Baixar Bugs (Markdown)",
                 data=md_bugs,
                 file_name=f"bug_reports_{project_id[:8]}.md",
                 mime="text/markdown",
                 key="btn_dl_bug_md"
+            )
+        with col_bdl3:
+            html_bugs = export_to_html(bugs, title=f"Relatório de Bugs - Ciclo: {bug_cycle_filter}")
+            st.download_button(
+                label="🌐 Baixar Bugs (Visual do App)",
+                data=html_bugs.encode("utf-8"),
+                file_name=f"bug_reports_{project_id[:8]}.html",
+                mime="text/html",
+                key="btn_dl_bug_html"
             )
             
         st.markdown("---")

@@ -1,6 +1,7 @@
-import pandas as pd
 import base64
+import pandas as pd
 import plotly.io as pio
+
 
 def export_to_csv(data: list[dict]) -> str:
     """Converte a lista em formato CSV (compatível com Excel)."""
@@ -68,7 +69,7 @@ def export_to_markdown(data: list[dict], title: str = "Relatório", is_bug_repor
 def export_to_html(data: list[dict], title: str = "Relatório", is_bug_report: bool = False) -> str:
     """Converte em HTML idêntico à tela do software (com suporte automático a Dark/Light mode)."""
     if not data:
-        return f"<html><body><h2>{title}</h2><p>Nenhum dado disponível.</p></body></html>"
+        return f"<!DOCTYPE html><html><body><h2>{title}</h2><p>Nenhum dado disponível.</p></body></html>"
 
     html_content = f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -269,6 +270,8 @@ def export_to_html(data: list[dict], title: str = "Relatório", is_bug_report: b
 </body>
 </html>
 """
+    return html_content  # 👈 ADICIONADO: Retorno explícito para evitar AttributeError no Streamlit
+
 
 def export_metrics_to_html(
     scope_label: str,
@@ -297,8 +300,15 @@ def export_metrics_to_html(
     def fig_to_html_div(fig):
         if fig is None:
             return '<div class="graph-box" style="display:flex;align-items:center;justify-content:center;height:250px;color:#A0AEC0;">Sem dados para exibir</div>'
+        
         try:
-            # 1. Tenta converter via Plotly Div sem duplicar a biblioteca
+            # Força o fundo limpo para o relatório exportado
+            fig.update_layout(
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="rgba(0,0,0,0)",
+                template="plotly_white"
+            )
+            # Converte com div responsiva
             div_html = pio.to_html(
                 fig,
                 include_plotlyjs=False,
@@ -306,14 +316,8 @@ def export_metrics_to_html(
                 config={"responsive": True, "displayModeBar": False},
             )
             return f'<div class="graph-box">{div_html}</div>'
-        except Exception:
-            try:
-                # 2. Fallback: Converte em Imagem SVG estática em Base64 (100% offline e à prova de falhas)
-                img_bytes = pio.to_image(fig, format="svg")
-                b64_img = base64.b64encode(img_bytes).decode("utf-8")
-                return f'<div class="graph-box"><img src="data:image/svg+xml;base64,{b64_img}" style="width:100%;height:auto;"/></div>'
-            except Exception as e:
-                return f'<div class="graph-box" style="color:#E53E3E;padding:20px;">Não foi possível renderizar o gráfico ({e})</div>'
+        except Exception as e:
+            return f'<div class="graph-box" style="color:#E53E3E;padding:20px;">Não foi possível renderizar o gráfico ({e})</div>'
 
     html_fig_tc = fig_to_html_div(fig_tc)
     html_fig_bugs = fig_to_html_div(fig_bugs)

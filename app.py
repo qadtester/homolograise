@@ -3,6 +3,10 @@ from config.ai_config import is_master_user, render_ai_provider_selector
 from config.database import supabase
 from modules import admin_panel, auth, metrics, projects, requirements, testing
 
+# IMPORTAÇÃO DOS NOVOS MÓDULOS (KANBAN E PERFIL)
+from views.kanban import render_kanban_board
+from views.profile import render_user_profile_page
+
 # ==============================================================================
 # 1. CONFIGURAÇÃO DA PÁGINA
 # ==============================================================================
@@ -142,7 +146,6 @@ with st.sidebar:
                         if t_lookup.data:
                             found_t = t_lookup.data[0]
 
-                            # Verifica se já está vinculado para evitar duplicidade no banco
                             check_exists = (
                                 supabase.table("team_members")
                                 .select("id")
@@ -152,7 +155,6 @@ with st.sidebar:
                             )
 
                             if not check_exists.data:
-                                # Todo novo usuário vinculado entra por padrão como 'leitor'
                                 supabase.table("team_members").insert({
                                     "team_id": found_t["id"],
                                     "user_id": user_info["id"],
@@ -161,8 +163,7 @@ with st.sidebar:
 
                             st.session_state["current_team_id"] = found_t["id"]
                             st.success(
-                                f"Vinculado à equipe '{found_t['name']}' com"
-                                " sucesso!"
+                                f"Vinculado à equipe '{found_t['name']}' com sucesso!"
                             )
                             st.rerun()
                         else:
@@ -185,10 +186,11 @@ with st.sidebar:
         "📁 Gestão de Projetos",
         "📝 Requisitos",
         "🧪 Módulo de Testes",
+        "📌 Quadro Kanban",
         "📊 Métricas & Exportação",
+        "👤 Perfil & Notificações",
     ]
 
-    # REGRA RESTRITA: APENAS o Criador/Dono da equipe ou Usuário Master vê o menu de Gestão de Equipe
     if is_team_owner or is_master_user():
         page_options.append("👥 Gestão de Equipe")
 
@@ -201,12 +203,13 @@ with st.sidebar:
 # 5. CARREGAMENTO DO PROJETO ATIVO
 # ==============================================================================
 active_project = None
-if page not in ["👥 Gestão de Equipe", "👑 Painel Admin Master"]:
+if page not in ["👥 Gestão de Equipe", "👑 Painel Admin Master", "👤 Perfil & Notificações"]:
     active_project = projects.render_project_selector()
 
     if not active_project and page in [
         "📝 Requisitos",
         "🧪 Módulo de Testes",
+        "📌 Quadro Kanban",
         "📊 Métricas & Exportação",
     ]:
         st.warning("⚠️ **Nenhum projeto selecionado!**")
@@ -227,6 +230,9 @@ elif page == "📝 Requisitos":
 
 elif page == "🧪 Módulo de Testes":
     testing.render_testing_module(active_project["id"])
+
+elif page == "📌 Quadro Kanban":
+    render_kanban_board(active_project["id"])
 
 elif page == "📊 Métricas & Exportação":
     project_id = active_project["id"]
@@ -271,8 +277,10 @@ elif page == "📊 Métricas & Exportação":
         test_cases, bug_reports, risk_matrix, user_stories
     )
 
+elif page == "👤 Perfil & Notificações":
+    render_user_profile_page()
+
 elif page == "👥 Gestão de Equipe":
-    # TRAVA EXTRA DE SEGURANÇA NA ROTA
     if not is_team_owner and not is_master_user():
         st.error(
             "🚫 **Acesso Negado:** Apenas o Administrador/Dono da equipe pode"
@@ -286,7 +294,6 @@ elif page == "👥 Gestão de Equipe":
         f" **{active_team.get('name')}**."
     )
 
-    # 1. Busca os membros vinculados à equipe do Dono
     members_res = (
         supabase.table("team_members")
         .select("role, users(id, name, email, created_at)")
@@ -304,7 +311,6 @@ elif page == "👥 Gestão de Equipe":
 
     st.divider()
 
-    # Mapeamento dos papéis permitidos para atribuição pelo Dono
     ROLE_LABELS = {
         "gestor": "Gestor (Criar, Editar e Excluir)",
         "editor": "Editor (Criar e Editar)",
@@ -312,7 +318,6 @@ elif page == "👥 Gestão de Equipe":
     }
     ROLE_KEYS = list(ROLE_LABELS.keys())
 
-    # 2. Listagem de membros exclusiva para gestão do Dono
     for member in members:
         is_owner_user = member["id"] == active_team.get("owner_id")
 
@@ -326,14 +331,12 @@ elif page == "👥 Gestão de Equipe":
             if is_owner_user:
                 st.success("👑 **Dono / Administrador**")
             else:
-                # Normaliza papéis antigos/legados
                 current_role = member["role"]
                 if current_role not in ROLE_KEYS:
                     current_role = "leitor"
 
                 current_role_index = ROLE_KEYS.index(current_role)
 
-                # O Dono define o papel do usuário vinculado aqui
                 new_role = st.selectbox(
                     "Papel na Equipe",
                     options=ROLE_KEYS,
@@ -363,7 +366,6 @@ elif page == "👥 Gestão de Equipe":
 
         with cols[3]:
             if not is_owner_user:
-                # O Dono pode excluir o acesso do usuário da equipe
                 if st.button(
                     "🗑️ Removê-lo",
                     key=f"rm_mem_{member['id']}",

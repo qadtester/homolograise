@@ -1,9 +1,9 @@
 import streamlit as st
 from config.database import supabase
 from utils.permissions import can_edit, can_delete_items
+import datetime
 
 def notify_user(user_id: str, title: str, message: str):
-    """Envia notificação no banco de dados para o usuário."""
     try:
         supabase.table("notifications").insert({
             "user_id": user_id,
@@ -14,7 +14,6 @@ def notify_user(user_id: str, title: str, message: str):
         st.error(f"Erro ao notificar usuário: {e}")
 
 def get_severity_badge(severity: str) -> str:
-    """Mapeia a severidade para a cor/emoji correto."""
     mapping = {
         "Baixa": "🟢 Baixa",
         "Média": "🟡 Média",
@@ -63,7 +62,7 @@ def render_kanban_board(project_id: str):
             }).execute()
         st.rerun()
 
-    # 3. BARRA DE AÇÕES (MODAIS E BOTÕES SUPERIORES)
+    # 3. BOTOES DE ACAO
     c_act1, c_act2, _ = st.columns([2, 2, 6])
     
     with c_act1:
@@ -74,27 +73,22 @@ def render_kanban_board(project_id: str):
         if can_edit(user_info) and st.button("⚙️ Gerenciar Colunas", use_container_width=True):
             st.session_state["open_manage_cols_modal"] = True
 
-    # --- MODAL: CRIAR CARD ---
+    # --- MODAL: CRIAR CARD NO KANBAN (NÃO GERA BUG) ---
     if st.session_state.get("open_new_card_modal", False):
-        with st.expander("📝 Criar Novo Card / Bug", expanded=True):
+        with st.expander("📝 Criar Novo Card no Kanban", expanded=True):
             with st.form("form_create_kanban_card"):
-                f_title = st.text_input("Título *")
-                f_desc = st.text_area("Descrição")
+                f_title = st.text_input("Título da Tarefa *")
+                f_desc = st.text_area("Descrição / Detalhes")
                 col_f1, col_f2, col_f3 = st.columns(3)
                 
                 with col_f1:
-                    f_sev = st.selectbox("Severidade", ["Baixa", "Média", "Alta", "Crítica"])
+                    f_sev = st.selectbox("Prioridade/Severidade", ["Baixa", "Média", "Alta", "Crítica"])
                 with col_f2:
                     f_col = st.selectbox("Coluna Inicial", [c["name"] for c in columns_data])
                 with col_f3:
                     f_assignee = st.selectbox("Atribuir a", list(member_options.keys()))
 
-                f_steps = st.text_area("Passos para reproduzir (opcional)")
-                f_expected = st.text_input("Comportamento Esperado (opcional)")
-                f_actual = st.text_input("Comportamento Observado (opcional)")
-
-                btn_sub, btn_close = st.columns([2, 2])
-                submitted = btn_sub.form_submit_button("Salvar Card")
+                submitted = st.form_submit_button("Salvar Tarefa")
                 
                 if submitted:
                     if not f_title.strip():
@@ -107,15 +101,13 @@ def render_kanban_board(project_id: str):
                             "severity": f_sev,
                             "status": f_col,
                             "assignee_id": member_options[f_assignee],
-                            "steps": f_steps,
-                            "expected_behavior": f_expected,
-                            "actual_behavior": f_actual,
-                            "comments": []
+                            "comments": [],
+                            "attachments": []
                         }
-                        supabase.table("bug_reports").insert(payload).execute()
+                        supabase.table("kanban_cards").insert(payload).execute()
                         
                         if member_options[f_assignee]:
-                            notify_user(member_options[f_assignee], "Novo Card Atribuído 🐛", f"Você foi atribuído ao card: '{f_title}'")
+                            notify_user(member_options[f_assignee], "Nova Tarefa Atribuída 📋", f"Você foi atribuído ao card: '{f_title}'")
 
                         st.session_state["open_new_card_modal"] = False
                         st.success("Card criado com sucesso!")
@@ -142,27 +134,23 @@ def render_kanban_board(project_id: str):
                         }).execute()
                         st.rerun()
 
-            # REORDENAÇÃO CORRIGIDA (ALINHAMENTO LIMPO)
             with t_ord:
                 st.write("Ajuste a ordem das colunas no quadro:")
                 for i, col_item in enumerate(columns_data):
                     c_name, c_btn_up, c_btn_down = st.columns([6, 1, 1])
-                    
                     c_name.markdown(f"**{i+1}. {col_item['name']}**")
                     
-                    if i > 0:
-                        if c_btn_up.button("⬆️", key=f"up_{col_item['id']}"):
-                            prev = columns_data[i-1]
-                            supabase.table("kanban_columns").update({"position": prev["position"]}).eq("id", col_item["id"]).execute()
-                            supabase.table("kanban_columns").update({"position": col_item["position"]}).eq("id", prev["id"]).execute()
-                            st.rerun()
+                    if i > 0 and c_btn_up.button("⬆️", key=f"up_{col_item['id']}"):
+                        prev = columns_data[i-1]
+                        supabase.table("kanban_columns").update({"position": prev["position"]}).eq("id", col_item["id"]).execute()
+                        supabase.table("kanban_columns").update({"position": col_item["position"]}).eq("id", prev["id"]).execute()
+                        st.rerun()
                             
-                    if i < len(columns_data) - 1:
-                        if c_btn_down.button("⬇️", key=f"down_{col_item['id']}"):
-                            nxt = columns_data[i+1]
-                            supabase.table("kanban_columns").update({"position": nxt["position"]}).eq("id", col_item["id"]).execute()
-                            supabase.table("kanban_columns").update({"position": col_item["position"]}).eq("id", nxt["id"]).execute()
-                            st.rerun()
+                    if i < len(columns_data) - 1 and c_btn_down.button("⬇️", key=f"down_{col_item['id']}"):
+                        nxt = columns_data[i+1]
+                        supabase.table("kanban_columns").update({"position": nxt["position"]}).eq("id", col_item["id"]).execute()
+                        supabase.table("kanban_columns").update({"position": col_item["position"]}).eq("id", nxt["id"]).execute()
+                        st.rerun()
 
             with t_del:
                 del_target = st.selectbox("Escolha a coluna para remover:", [c["name"] for c in columns_data])
@@ -177,134 +165,119 @@ def render_kanban_board(project_id: str):
 
     st.divider()
 
-    # 4. BARRA DE FILTROS
+    # 4. FILTROS
     with st.expander("🔍 Filtros Avançados", expanded=False):
         fl1, fl2, fl3 = st.columns(3)
         with fl1:
-            filter_sev = st.multiselect("Filtrar por Severidade", ["Baixa", "Média", "Alta", "Crítica"])
+            filter_sev = st.multiselect("Filtrar por Severidade/Prioridade", ["Baixa", "Média", "Alta", "Crítica"])
         with fl2:
             filter_assignee = st.multiselect("Filtrar por Atribuído", list(member_options.keys()))
         with fl3:
             filter_search = st.text_input("Buscar por Título / Palavra-chave")
 
-    # 5. CARREGA BUGS/CARDS
-    bugs_res = (
-        supabase.table("bug_reports")
-        .select("*, users!bug_reports_assignee_id_fkey(name)")
+    # 5. CARREGA CARDS DO KANBAN
+    cards_res = (
+        supabase.table("kanban_cards")
+        .select("*, users!kanban_cards_assignee_id_fkey(name)")
         .eq("project_id", project_id)
         .execute()
     )
-    bugs = bugs_res.data or []
+    cards = cards_res.data or []
 
     # Aplica os filtros
-    filtered_bugs = []
-    for b in bugs:
-        if filter_sev and b.get("severity") not in filter_sev:
+    filtered_cards = []
+    for c in cards:
+        if filter_sev and c.get("severity") not in filter_sev:
             continue
-        b_assignee_name = b.get("users", {}).get("name") if b.get("users") else "Não atribuído"
-        if filter_assignee and b_assignee_name not in filter_assignee:
+        c_assignee_name = c.get("users", {}).get("name") if c.get("users") else "Não atribuído"
+        if filter_assignee and c_assignee_name not in filter_assignee:
             continue
-        if filter_search and filter_search.lower() not in b.get("title", "").lower():
+        if filter_search and filter_search.lower() not in c.get("title", "").lower():
             continue
-        filtered_bugs.append(b)
+        filtered_cards.append(c)
 
     # 6. EXIBIÇÃO DAS COLUNAS E CARDS
     ui_cols = st.columns(len(columns_data))
 
     for idx, col_info in enumerate(columns_data):
         col_name = col_info["name"]
-        col_bugs = [b for b in filtered_bugs if b.get("status") == col_name]
+        col_cards = [card for card in filtered_cards if card.get("status") == col_name]
 
         with ui_cols[idx]:
-            st.markdown(f"#### **{col_name}** `({len(col_bugs)})`")
+            st.markdown(f"#### **{col_name}** `({len(col_cards)})`")
             st.markdown("---")
 
-            for bug in col_bugs:
-                badge = get_severity_badge(bug.get("severity", "Baixa"))
-                assigned_name = bug.get("users", {}).get("name") if bug.get("users") else "Não atribuído"
+            for card in col_cards:
+                badge = get_severity_badge(card.get("severity", "Baixa"))
+                assigned_name = card.get("users", {}).get("name") if card.get("users") else "Não atribuído"
 
-                with st.expander(f"{badge} {bug['title']}"):
+                with st.expander(f"{badge} {card['title']}"):
                     st.caption(f"**Atribuído:** {assigned_name}")
-                    st.write(bug.get("description") or "*Sem descrição*")
-
-                    if bug.get("steps"):
-                        st.markdown("**📋 Passos:**")
-                        st.code(bug.get("steps"), language="text")
-
-                    if bug.get("expected_behavior"):
-                        st.markdown(f"**🎯 Esperado:** {bug.get('expected_behavior')}")
-                    if bug.get("actual_behavior"):
-                        st.markdown(f"**⚠️ Observado:** {bug.get('actual_behavior')}")
+                    st.write(card.get("description") or "*Sem descrição*")
 
                     st.divider()
 
-                    # ABA DE EDIÇÃO E COMENTÁRIOS DO CARD
                     tab_card_actions, tab_card_edit, tab_card_comments = st.tabs(["⚡ Mover/Atribuir", "✏️ Editar", "💬 Comentários"])
 
+                    # MOVER / ATRIBUIR
                     with tab_card_actions:
                         if can_edit(user_info):
                             new_col = st.selectbox(
                                 "Mover para:", 
-                                [c["name"] for c in columns_data], 
-                                index=[c["name"] for c in columns_data].index(col_name), 
-                                key=f"mov_{bug['id']}"
+                                [col["name"] for col in columns_data], 
+                                index=[col["name"] for col in columns_data].index(col_name), 
+                                key=f"mov_{card['id']}"
                             )
                             if new_col != col_name:
-                                supabase.table("bug_reports").update({"status": new_col}).eq("id", bug["id"]).execute()
+                                supabase.table("kanban_cards").update({"status": new_col}).eq("id", card["id"]).execute()
                                 st.rerun()
 
-                            cur_assignee_key = next((k for k, v in member_options.items() if v == bug.get("assignee_id")), "Não atribuído")
+                            cur_assignee_key = next((k for k, v in member_options.items() if v == card.get("assignee_id")), "Não atribuído")
                             new_assignee_key = st.selectbox(
                                 "Reatribuir a:", 
                                 list(member_options.keys()), 
                                 index=list(member_options.keys()).index(cur_assignee_key), 
-                                key=f"assign_{bug['id']}"
+                                key=f"assign_{card['id']}"
                             )
-                            if member_options[new_assignee_key] != bug.get("assignee_id"):
+                            if member_options[new_assignee_key] != card.get("assignee_id"):
                                 new_uid = member_options[new_assignee_key]
-                                supabase.table("bug_reports").update({"assignee_id": new_uid}).eq("id", bug["id"]).execute()
+                                supabase.table("kanban_cards").update({"assignee_id": new_uid}).eq("id", card["id"]).execute()
                                 if new_uid:
-                                    notify_user(new_uid, "Reatribuição de Card 🐛", f"O card '{bug['title']}' foi reatribuído a você.")
+                                    notify_user(new_uid, "Reatribuição de Tarefa 📋", f"O card '{card['title']}' foi reatribuído a você.")
                                 st.rerun()
 
-                    # EDIÇÃO DE CONTEÚDO DO CARD
+                    # EDIÇÃO
                     with tab_card_edit:
                         if can_edit(user_info):
-                            with st.form(key=f"form_edit_card_{bug['id']}"):
-                                e_title = st.text_input("Título", value=bug.get("title", ""))
-                                e_desc = st.text_area("Descrição", value=bug.get("description", ""))
-                                e_sev = st.selectbox("Severidade", ["Baixa", "Média", "Alta", "Crítica"], index=["Baixa", "Média", "Alta", "Crítica"].index(bug.get("severity", "Baixa")))
-                                e_steps = st.text_area("Passos", value=bug.get("steps", ""))
+                            with st.form(key=f"form_edit_card_{card['id']}"):
+                                e_title = st.text_input("Título", value=card.get("title", ""))
+                                e_desc = st.text_area("Descrição", value=card.get("description", ""))
+                                e_sev = st.selectbox("Severidade", ["Baixa", "Média", "Alta", "Crítica"], index=["Baixa", "Média", "Alta", "Crítica"].index(card.get("severity", "Baixa")))
                                 
                                 if st.form_submit_button("Salvar Edição"):
-                                    supabase.table("bug_reports").update({
+                                    supabase.table("kanban_cards").update({
                                         "title": e_title.strip(),
                                         "description": e_desc.strip(),
-                                        "severity": e_sev,
-                                        "steps": e_steps.strip()
-                                    }).eq("id", bug["id"]).execute()
+                                        "severity": e_sev
+                                    }).eq("id", card["id"]).execute()
                                     st.success("Card atualizado!")
                                     st.rerun()
 
-                    # COMENTÁRIOS E HISTÓRICO
+                    # COMENTÁRIOS
                     with tab_card_comments:
-                        comments = bug.get("comments") or []
-                        
-                        # Exibe comentários anteriores
+                        comments = card.get("comments") or []
                         if comments:
-                            for c in comments:
-                                st.markdown(f"**{c.get('author', 'Usuário')}**: {c.get('text')}")
-                                st.caption(f"_{c.get('date', '')}_")
+                            for com in comments:
+                                st.markdown(f"**{com.get('author', 'Usuário')}**: {com.get('text')}")
+                                st.caption(f"_{com.get('date', '')}_")
                                 st.divider()
                         else:
-                            st.caption("Nenhum comentário registrado.")
+                            st.caption("Nenhum comentário.")
 
-                        # Adiciona novo comentário
-                        new_comment_text = st.text_area("Adicionar atualização/comentário:", key=f"comm_input_{bug['id']}")
-                        if st.button("Enviar Comentário", key=f"btn_comm_{bug['id']}"):
+                        new_comment_text = st.text_area("Adicionar comentário:", key=f"comm_input_{card['id']}")
+                        if st.button("Enviar Comentário", key=f"btn_comm_{card['id']}"):
                             if new_comment_text.strip():
                                 author_name = user_info.get("name", "Usuário")
-                                import datetime
                                 now_str = datetime.datetime.now().strftime("%d/%m/%Y %H:%M")
                                 
                                 updated_comments = comments + [{
@@ -312,32 +285,31 @@ def render_kanban_board(project_id: str):
                                     "text": new_comment_text.strip(),
                                     "date": now_str
                                 }]
-                                
-                                supabase.table("bug_reports").update({"comments": updated_comments}).eq("id", bug["id"]).execute()
-                                st.success("Comentário registrado!")
+                                supabase.table("kanban_cards").update({"comments": updated_comments}).eq("id", card["id"]).execute()
+                                st.success("Comentário salvo!")
                                 st.rerun()
 
                     st.divider()
 
-                    # SEÇÃO DE EVIDÊNCIAS
+                    # ANEXOS
                     st.markdown("**📎 Anexos:**")
-                    attachments = bug.get("attachments") or []
+                    attachments = card.get("attachments") or []
                     for att in attachments:
                         if isinstance(att, dict) and att.get("url"):
                             st.markdown(f"📄 [{att.get('name')}]({att.get('url')})")
 
                     if can_edit(user_info):
-                        up_file = st.file_uploader("Anexar Evidência", key=f"file_{bug['id']}")
-                        if up_file and st.button("Salvar Anexo", key=f"btn_file_{bug['id']}"):
+                        up_file = st.file_uploader("Anexar arquivo", key=f"file_{card['id']}")
+                        if up_file and st.button("Salvar Anexo", key=f"btn_file_{card['id']}"):
                             file_bytes = up_file.read()
-                            file_path = f"bug_evidences/{bug['id']}_{up_file.name}"
+                            file_path = f"kanban_evidences/{card['id']}_{up_file.name}"
                             try:
                                 supabase.storage.from_("evidences").upload(file_path, file_bytes, {"content-type": up_file.type})
                                 file_url = supabase.storage.from_("evidences").get_public_url(file_path)
                                 
                                 updated_att = attachments + [{"name": up_file.name, "url": file_url}]
-                                supabase.table("bug_reports").update({"attachments": updated_att}).eq("id", bug["id"]).execute()
-                                st.success("Anexo enviado!")
+                                supabase.table("kanban_cards").update({"attachments": updated_att}).eq("id", card["id"]).execute()
+                                st.success("Anexo salvo!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Erro no envio: {e}")
@@ -346,7 +318,7 @@ def render_kanban_board(project_id: str):
 
                     # EXCLUSÃO RESTRITA
                     if can_delete_items(user_info):
-                        if st.button("🗑️ Excluir Card", key=f"del_card_{bug['id']}", type="secondary"):
-                            supabase.table("bug_reports").delete().eq("id", bug["id"]).execute()
+                        if st.button("🗑️ Excluir Card", key=f"del_card_{card['id']}", type="secondary"):
+                            supabase.table("kanban_cards").delete().eq("id", card["id"]).execute()
                             st.success("Card excluído!")
                             st.rerun()

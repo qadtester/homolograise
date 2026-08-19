@@ -1,9 +1,8 @@
 import streamlit as st
 from config.database import supabase
-from utils.permissions import can_edit, can_create, can_delete_items
+from utils.permissions import can_edit
 
 def notify_user(user_id: str, title: str, message: str):
-    """Envia notificação no banco de dados para o usuário atribuído."""
     try:
         supabase.table("notifications").insert({
             "user_id": user_id,
@@ -11,14 +10,14 @@ def notify_user(user_id: str, title: str, message: str):
             "message": message
         }).execute()
     except Exception as e:
-        st.error(f"Erro ao disparar notificação: {e}")
+        st.error(f"Erro na notificação: {e}")
 
 def render_kanban_board(project_id: str):
-    st.subheader("📋 Quadro Kanban de Defeitos & Bugs")
+    st.title("📌 Quadro Kanban do Projeto")
     user_info = st.session_state.get("user", {})
     team_id = st.session_state.get("current_team_id")
 
-    # CORREÇÃO 1: Consulta ajustada para o relacionamento exato de team_members -> users
+    # 1. BUSCA MEMBROS DA EQUIPE
     team_members = []
     if team_id:
         res = (
@@ -32,7 +31,7 @@ def render_kanban_board(project_id: str):
     member_options = {m["name"]: m["id"] for m in team_members}
     member_options["Nenhum"] = None
 
-    # 1. GERENCIAMENTO DINÂMICO DE COLUNAS
+    # 2. CARREGA E ORDENA AS COLUNAS
     cols_res = (
         supabase.table("kanban_columns")
         .select("*")
@@ -43,7 +42,6 @@ def render_kanban_board(project_id: str):
     columns_data = cols_res.data or []
 
     if not columns_data:
-        st.warning("Nenhuma coluna encontrada para o Kanban. Inicializando colunas padrão...")
         defaults = ["A Fazer", "Em Progresso", "Em Revisão", "Concluído"]
         for idx, name in enumerate(defaults):
             supabase.table("kanban_columns").insert({
@@ -53,12 +51,33 @@ def render_kanban_board(project_id: str):
             }).execute()
         st.rerun()
 
-    # Gerenciador de Estrutura de Colunas (Criar/Deletar)
-    if can_edit(user_info):
-        with st.expander("⚙️ Configurar Colunas do Quadro"):
-            c_add, c_del = st.columns(2)
-            with c_add:
-                new_col_name = st.text_input("Nova Coluna:")
+    # 3. CONTROLES DE COLUNA E NOVO CARD
+    with st.expander("⚙️ Gerenciar Quadro (Colunas & Novas Tarefas)"):
+        tab_new_task, tab_cols = st.tabs(["➕ Criar Nova Tarefa/Bug", "🛠️ Configurar Colunas"])
+        
+        with tab_new_task:
+            with st.form("quick_add_card"):
+                c_title = st.text_input("Título do Card / Tarefa")
+                c_desc = st.text_area("Descrição / Detalhes")
+                c_sev = st.selectbox("Severidade / Prioridade", ["Baixa", "Média", "Alta", "Crítica"])
+                c_col = st.selectbox("Coluna Inicial", [c["name"] for c in columns_data])
+                
+                if st.form_submit_button("Criar Card"):
+                    if c_title.strip():
+                        supabase.table("bug_reports").insert({
+                            "project_id": project_id,
+                            "title": c_title.strip(),
+                            "description": c_desc.strip(),
+                            "severity": c_sev,
+                            "status": c_col
+                        }).execute()
+                        st.success("Card adicionado ao Quadro!")
+                        st.rerun()
+
+        with tab_cols:
+            c1, c2 = st.columns(2)
+            with c1:
+                new_col_name = st.text_input("Nome da Nova Coluna:")
                 if st.button("➕ Adicionar Coluna"):
                     if new_col_name.strip():
                         max_pos = max([c["position"] for c in columns_data], default=0)
@@ -67,18 +86,33 @@ def render_kanban_board(project_id: str):
                             "name": new_col_name.strip(),
                             "position": max_pos + 1
                         }).execute()
-                        st.success("Coluna criada!")
                         st.rerun()
 
-            with c_del:
+            with c2:
                 col_to_del = st.selectbox("Remover Coluna:", [c["name"] for c in columns_data])
                 if st.button("🗑️ Deletar Coluna", type="primary"):
                     target_col = next(c for c in columns_data if c["name"] == col_to_del)
                     supabase.table("kanban_columns").delete().eq("id", target_col["id"]).execute()
-                    st.success("Coluna removida!")
                     st.rerun()
 
-    # 2. CARREGAMENTO DOS BUGS
+            st.markdown("**Reordenar Colunas:**")
+            for i, col_item in enumerate(columns_data):
+                col_btn1, col_btn2, col_txt = st.columns([1, 1, 8])
+                if i > 0 and col_btn1.button("⬅️", key=f"left_{col_item['id']}"):
+                    # Troca posição com o anterior
+                    prev_col = columns_data[i-1]
+                    supabase.table("kanban_columns").update({"position": prev_col["position"]}).eq("id", col_item["id"]).execute()
+                    supabase.table("kanban_columns").update({"position": col_item["position"]}).eq("id", prev_col["id"]).execute()
+                    st.rerun()
+                if i < len(columns_data) - 1 and col_btn2.button("➡️", key=f"right_{col_item['id']}"):
+                    # Troca posição com o próximo
+                    next_col = columns_data[i+1]
+                    supabase.table("kanban_columns").update({"position": next_col["position"]}).eq("id", col_item["id"]).execute()
+                    supabase.table("kanban_columns").update({"position": col_item["position"]}).eq("id", next_col["id"]).execute()
+                    st.rerun()
+                col_txt.write(f"**{i+1}. {col_item['name']}**")
+
+    # 4. CARREGAMENTO DOS BUGS E RENDERIZAÇÃO
     bugs_res = (
         supabase.table("bug_reports")
         .select("*, users!bug_reports_assignee_id_fkey(name)")
@@ -87,7 +121,6 @@ def render_kanban_board(project_id: str):
     )
     bugs = bugs_res.data or []
 
-    # 3. RENDERIZAÇÃO DAS COLUNAS KANBAN
     ui_cols = st.columns(len(columns_data))
 
     for idx, col_info in enumerate(columns_data):
@@ -104,9 +137,23 @@ def render_kanban_board(project_id: str):
 
                 with st.expander(f"{sev_color} {bug['title']}"):
                     st.caption(f"**Severidade:** {bug.get('severity')} | **Atribuído:** {assigned_name}")
+                    
+                    # DETALHES COMPLETOS DO BUG
                     st.write(bug.get("description", "Sem descrição."))
+                    
+                    if bug.get("steps"):
+                        st.markdown("**📋 Passos para Reproduzir:**")
+                        st.code(bug.get("steps"), language="text")
 
-                    # Mover Card para Outra Coluna
+                    if bug.get("expected_behavior"):
+                        st.markdown(f"**🎯 Comportamento Esperado:**\n{bug.get('expected_behavior')}")
+
+                    if bug.get("actual_behavior"):
+                        st.markdown(f"**⚠️ Comportamento Observado:**\n{bug.get('actual_behavior')}")
+
+                    st.divider()
+
+                    # CONTROLES DE MOVIMENTAÇÃO E ASSIGNAÇÃO
                     if can_edit(user_info):
                         target_col = st.selectbox(
                             "Mover para:", 
@@ -118,7 +165,6 @@ def render_kanban_board(project_id: str):
                             supabase.table("bug_reports").update({"status": target_col}).eq("id", bug["id"]).execute()
                             st.rerun()
 
-                        # Atribuir Membro + Notificação
                         current_assignee = next((k for k, v in member_options.items() if v == bug.get("assignee_id")), "Nenhum")
                         selected_user = st.selectbox(
                             "Atribuir a:", 
@@ -130,47 +176,33 @@ def render_kanban_board(project_id: str):
                         if member_options[selected_user] != bug.get("assignee_id"):
                             new_assignee_id = member_options[selected_user]
                             supabase.table("bug_reports").update({"assignee_id": new_assignee_id}).eq("id", bug["id"]).execute()
-                            
                             if new_assignee_id:
-                                notify_user(
-                                    user_id=new_assignee_id,
-                                    title="Novo Bug Atribuído 🐛",
-                                    message=f"Você foi atribuído ao bug '{bug['title']}' no quadro Kanban."
-                                )
+                                notify_user(new_assignee_id, "Novo Bug Atribuído 🐛", f"Você foi atribuído ao bug '{bug['title']}'.")
                             st.rerun()
 
-                    # CORREÇÃO 2: Exibição e Upload Efetivo de Evidências via Supabase Storage
+                    # EVIDÊNCIAS E ANEXOS
                     st.markdown("**📎 Evidências:**")
                     attachments = bug.get("attachments") or []
                     for att in attachments:
-                        if att.get("url"):
+                        if isinstance(att, dict) and att.get("url"):
                             st.markdown(f"📄 [{att.get('name')}]({att.get('url')})")
-                        else:
-                            st.caption(f"📄 {att.get('name')}")
 
                     if can_edit(user_info):
                         uploaded_file = st.file_uploader("Anexar arquivo/evidência", key=f"att_{bug['id']}")
-                        if uploaded_file:
+                        if uploaded_file and st.button("Enviar Anexo", key=f"btn_att_{bug['id']}"):
                             file_bytes = uploaded_file.read()
                             file_path = f"bug_evidences/{bug['id']}_{uploaded_file.name}"
                             
                             try:
-                                # Envia o arquivo para o Storage no bucket "evidences"
                                 supabase.storage.from_("evidences").upload(
-                                    file_path, 
-                                    file_bytes, 
-                                    {"content-type": uploaded_file.type}
+                                    file_path, file_bytes, {"content-type": uploaded_file.type}
                                 )
                                 file_url = supabase.storage.from_("evidences").get_public_url(file_path)
-                            except Exception:
-                                file_url = None
-
-                            new_att = {
-                                "name": uploaded_file.name, 
-                                "type": uploaded_file.type,
-                                "url": file_url
-                            }
-                            updated_attachments = attachments + [new_att]
-                            supabase.table("bug_reports").update({"attachments": updated_attachments}).eq("id", bug["id"]).execute()
-                            st.success("Evidência anexada com sucesso!")
-                            st.rerun()
+                                
+                                new_att = {"name": uploaded_file.name, "url": file_url}
+                                updated_attachments = attachments + [new_att]
+                                supabase.table("bug_reports").update({"attachments": updated_attachments}).eq("id", bug["id"]).execute()
+                                st.success("Arquivo anexado!")
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Erro ao subir arquivo: {e}")

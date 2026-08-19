@@ -346,6 +346,34 @@ def render_test_cases_tab(project_id: str):
 # ABA 2: BUG REPORTS (ISTQB / IEEE 829)
 # ==========================================
 
+def create_kanban_card_from_bug(project_id: str, bug_id: str, title: str, description: str, severity: str):
+    """Helper para criar um card no Kanban automaticamente ao registrar um Bug."""
+    try:
+        # Busca a primeira coluna do Kanban para o projeto
+        cols_res = (
+            supabase.table("kanban_columns")
+            .select("name")
+            .eq("project_id", project_id)
+            .order("position")
+            .limit(1)
+            .execute()
+        )
+        initial_col = cols_res.data[0]["name"] if cols_res.data else "A Fazer"
+
+        card_payload = {
+            "project_id": project_id,
+            "bug_id": bug_id,
+            "title": f"🐛 {title}",
+            "description": description,
+            "severity": severity,
+            "status": initial_col,
+            "comments": [],
+            "attachments": []
+        }
+        supabase.table("kanban_cards").insert(card_payload).execute()
+    except Exception as e:
+        st.warning(f"Bug criado, mas ocorreu um erro ao gerar o card no Kanban: {e}")
+
 def render_bug_reports_tab(project_id: str):
     st.subheader("🐛 Registro e Gestão de Bugs")
     
@@ -381,11 +409,15 @@ def render_bug_reports_tab(project_id: str):
                                 
                                 if data and isinstance(data, dict):
                                     steps_content = data.get("steps_to_reproduce") or ""
+                                    bug_title = data.get("title", "Bug Relatado por IA")
+                                    bug_desc = data.get("description", raw_bug)
+                                    bug_sev = data.get("severity", "Média")
+
                                     payload = {
                                         "project_id": project_id, 
-                                        "title": data.get("title", "Bug Relatado por IA"), 
-                                        "description": data.get("description", raw_bug),
-                                        "severity": data.get("severity", "Média"),
+                                        "title": bug_title, 
+                                        "description": bug_desc,
+                                        "severity": bug_sev,
                                         "steps": steps_content, 
                                         "expected_behavior": data.get("expected_behavior", ""), 
                                         "actual_behavior": data.get("actual_behavior", ""),
@@ -393,8 +425,13 @@ def render_bug_reports_tab(project_id: str):
                                         "test_cycle": active_bug_cycle
                                     }
                                     try:
-                                        supabase.table("bug_reports").insert(payload).execute()
-                                        st.success("Bug ISTQB registrado com sucesso!")
+                                        res = supabase.table("bug_reports").insert(payload).execute()
+                                        if res.data:
+                                            created_bug_id = res.data[0]["id"]
+                                            # Gera o card no Kanban automaticamente
+                                            create_kanban_card_from_bug(project_id, created_bug_id, bug_title, bug_desc, bug_sev)
+
+                                        st.success("Bug ISTQB registrado e adicionado ao Kanban com sucesso!")
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"Erro ao salvar no Supabase: {e}")
@@ -418,18 +455,23 @@ def render_bug_reports_tab(project_id: str):
                         elif title.strip() and steps.strip() and expected_behavior.strip() and actual_behavior.strip():
                             payload = {
                                 "project_id": project_id, 
-                                "title": title, 
+                                "title": title.strip(), 
                                 "description": description.strip(),
                                 "severity": severity,
-                                "steps": steps, 
-                                "expected_behavior": expected_behavior, 
-                                "actual_behavior": actual_behavior,
+                                "steps": steps.strip(), 
+                                "expected_behavior": expected_behavior.strip(), 
+                                "actual_behavior": actual_behavior.strip(),
                                 "status": "Aberto",
                                 "test_cycle": active_bug_cycle
                             }
                             try:
-                                supabase.table("bug_reports").insert(payload).execute()
-                                st.success("Bug registrado com sucesso!")
+                                res = supabase.table("bug_reports").insert(payload).execute()
+                                if res.data:
+                                    created_bug_id = res.data[0]["id"]
+                                    # Gera o card no Kanban automaticamente
+                                    create_kanban_card_from_bug(project_id, created_bug_id, title.strip(), description.strip(), severity)
+
+                                st.success("Bug registrado e adicionado ao Kanban com sucesso!")
                                 st.rerun()
                             except Exception as e:
                                 st.error(f"Erro ao salvar no Supabase: {e}")
@@ -521,7 +563,7 @@ def render_bug_reports_tab(project_id: str):
                     bug_cycle_tag = bug.get('test_cycle', 'Sem Ciclo')
                     sev_color = "🔴" if sev in ["Alta", "Crítica"] else ("🟡" if sev == "Média" else "🟢")
                     
-                    with st.expander(f"{sev_color} [{sev}] {bug.get('title')} - Status: `{bug_status}`"):
+                    with st.expander(f"{sev_color} [{sev}] {bug.get('title')} - Status QA: `{bug_status}`"):
                         st.markdown(f"**Ciclo / Release:** `{bug_cycle_tag}`")
                         if bug.get("description"):
                             st.markdown(f"**Descrição:**\n\n{bug.get('description')}")
@@ -532,14 +574,14 @@ def render_bug_reports_tab(project_id: str):
                         st.divider()
                         c_status, c_edit, c_clone, c_del = st.columns([2, 1, 1, 1])
                         
-                        # --- MODIFICAR STATUS ---
+                        # --- MODIFICAR STATUS DE QA ---
                         with c_status:
                             if can_edit(user_info):
                                 status_options = ["Aberto", "Em correção", "Pronto para Teste", "Passou", "Fechado"]
                                 current_idx = status_options.index(bug_status) if bug_status in status_options else 0
                                 
                                 new_b_status = st.selectbox(
-                                    "Atualizar Status:", 
+                                    "Atualizar Status QA:", 
                                     status_options,
                                     index=current_idx,
                                     key=f"st_bug_{bug['id']}"
@@ -548,7 +590,7 @@ def render_bug_reports_tab(project_id: str):
                                     if st.button("💾 Salvar Status", key=f"btn_save_st_{bug['id']}"):
                                         try:
                                             supabase.table("bug_reports").update({"status": new_b_status}).eq("id", bug['id']).execute()
-                                            st.success("Status atualizado!")
+                                            st.success("Status QA atualizado!")
                                             st.rerun()
                                         except Exception as e:
                                             st.error(f"Erro ao atualizar status: {e}")
@@ -591,7 +633,7 @@ def render_bug_reports_tab(project_id: str):
                         # --- DUPLICAR / CLONAR BUG ---
                         with c_clone:
                             if can_edit(user_info):
-                                if st.button("📋 Duplicar Bug", key=f"btn_bug_clone_{bug['id']}", help="Duplica este bug para reutilização em outro ciclo ou reabertura em novo módulo"):
+                                if st.button("📋 Duplicar Bug", key=f"btn_bug_clone_{bug['id']}", help="Duplica este bug e cria um novo card no Kanban"):
                                     bug_clone_payload = {
                                         "project_id": project_id,
                                         "title": f"{bug['title']} (Cópia)",
@@ -604,8 +646,17 @@ def render_bug_reports_tab(project_id: str):
                                         "test_cycle": active_bug_cycle if active_bug_cycle else bug_cycle_tag
                                     }
                                     try:
-                                        supabase.table("bug_reports").insert(bug_clone_payload).execute()
-                                        st.success("Bug duplicado com sucesso!")
+                                        res = supabase.table("bug_reports").insert(bug_clone_payload).execute()
+                                        if res.data:
+                                            created_bug_id = res.data[0]["id"]
+                                            create_kanban_card_from_bug(
+                                                project_id, 
+                                                created_bug_id, 
+                                                bug_clone_payload["title"], 
+                                                bug_clone_payload["description"], 
+                                                bug_clone_payload["severity"]
+                                            )
+                                        st.success("Bug duplicado e adicionado ao Kanban!")
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"Erro ao duplicar bug: {e}")

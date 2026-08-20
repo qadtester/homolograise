@@ -310,7 +310,7 @@ def render_test_cases_tab(project_id: str):
         for cycle_name, tc_list in grouped_tc.items():
             with st.expander(
                 f"📦 **Ciclo / Release: {cycle_name}** ({len(tc_list)} testes)",
-                expanded=True,
+                expanded=False,
             ):
                 for tc in tc_list:
                     status = tc.get("status", "Não Executado")

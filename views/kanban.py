@@ -404,8 +404,10 @@ def render_kanban_board(project_id: str):
 
                     st.divider()
 
-                    # ANEXOS (COM SUPORTE A REMOÇÃO)
+                    # ANEXOS (COM SUPORTE A REMOÇÃO E LIMITE DE 10MB)
                     st.markdown("**📎 Anexos:**")
+                    st.caption("Limite máximo: 10 MB por arquivo")
+
                     attachments = card.get("attachments") or []
                     if attachments:
                         for idx_att, att in enumerate(attachments):
@@ -421,8 +423,10 @@ def render_kanban_board(project_id: str):
                                     ):
                                         if att.get("path"):
                                             delete_attachment_from_storage(att["path"])
-                                        
-                                        updated_att = [a for i, a in enumerate(attachments) if i != idx_att]
+
+                                        updated_att = [
+                                            a for i, a in enumerate(attachments) if i != idx_att
+                                        ]
                                         supabase.table("kanban_cards").update(
                                             {"attachments": updated_att}
                                         ).eq("id", card["id"]).execute()
@@ -436,50 +440,53 @@ def render_kanban_board(project_id: str):
                             key=f"form_att_{card['id']}", clear_on_submit=True
                         ):
                             up_file = st.file_uploader(
-                                "Selecionar arquivo", key=f"file_{card['id']}"
+                                "Selecionar arquivo (máx. 10 MB)", key=f"file_{card['id']}"
                             )
                             sub_att = st.form_submit_button("📤 Salvar Anexo")
 
                         if sub_att:
                             if up_file is not None:
                                 file_bytes = up_file.read()
-                                safe_filename = up_file.name.replace(" ", "_")
-                                file_path = f"kanban_evidences/{card['id']}_{safe_filename}"
+                                max_size_bytes = 10 * 1024 * 1024  # 10 MB
 
-                                try:
-                                    supabase.storage.from_("evidences").upload(
-                                        path=file_path,
-                                        file=file_bytes,
-                                        file_options={
-                                            "content-type": up_file.type,
-                                            "upsert": "true",
-                                        },
-                                    )
-                                    file_url = (
-                                        supabase.storage.from_("evidences").get_public_url(
-                                            file_path
+                                if len(file_bytes) > max_size_bytes:
+                                    st.error("O arquivo excede o limite máximo permitido de 10 MB.")
+                                else:
+                                    safe_filename = up_file.name.replace(" ", "_")
+                                    file_path = f"kanban_evidences/{card['id']}_{safe_filename}"
+
+                                    try:
+                                        supabase.storage.from_("evidences").upload(
+                                            path=file_path,
+                                            file=file_bytes,
+                                            file_options={
+                                                "content-type": up_file.type,
+                                                "upsert": "true",
+                                            },
                                         )
-                                    )
+                                        file_url = (
+                                            supabase.storage.from_("evidences").get_public_url(
+                                                file_path
+                                            )
+                                        )
 
-                                    updated_att = attachments + [
-                                        {
-                                            "name": up_file.name,
-                                            "url": file_url,
-                                            "path": file_path,
-                                        }
-                                    ]
-                                    supabase.table("kanban_cards").update(
-                                        {"attachments": updated_att}
-                                    ).eq("id", card["id"]).execute()
+                                        updated_att = attachments + [
+                                            {
+                                                "name": up_file.name,
+                                                "url": file_url,
+                                                "path": file_path,
+                                            }
+                                        ]
+                                        supabase.table("kanban_cards").update(
+                                            {"attachments": updated_att}
+                                        ).eq("id", card["id"]).execute()
 
-                                    st.success("Anexo salvo com sucesso!")
-                                    st.rerun()
-                                except Exception as e:
-                                    st.error(f"Erro ao salvar no Storage: {e}")
+                                        st.success("Anexo salvo com sucesso!")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Erro ao salvar no Storage: {e}")
                             else:
-                                st.warning(
-                                    "Selecione um arquivo antes de enviar."
-                                )
+                                st.warning("Selecione um arquivo antes de enviar.")
 
                     st.divider()
 
@@ -490,7 +497,6 @@ def render_kanban_board(project_id: str):
                             key=f"del_card_{card['id']}",
                             type="secondary",
                         ):
-                            # Remove todos os anexos associados ao card do Storage
                             for att in attachments:
                                 if isinstance(att, dict) and att.get("path"):
                                     delete_attachment_from_storage(att["path"])

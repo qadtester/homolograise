@@ -3,7 +3,7 @@ from config.ai_config import is_master_user, render_ai_provider_selector
 from config.database import supabase
 from modules import admin_panel, auth, metrics, projects, requirements, testing
 
-# IMPORTAÇÃO DOS NOVOS MÓDULOS (KANBAN E PERFIL)
+# IMPORTAÇÃO DOS MÓDULOS
 from views.kanban import render_kanban_board
 from views.profile import render_user_profile_page
 
@@ -97,7 +97,22 @@ with st.sidebar:
     elif is_team_owner:
         st.caption("👑 **Papel na Equipe:** `Dono / Administrador`")
     else:
-        st.caption(f"🛡️ **Papel na Equipe:** `{user_info.get('role', 'leitor').title()}`")
+        st.caption(
+            f"🛡️ **Papel na Equipe:** `{user_info.get('role', 'leitor').title()}`"
+        )
+
+    # --- VERIFICAÇÃO DE NOTIFICAÇÕES NÃO LIDAS PARA O SININHO ---
+    unread_notifs = (
+        supabase.table("notifications")
+        .select("id", count="exact")
+        .eq("user_id", user_info["id"])
+        .eq("read", False)
+        .execute()
+    )
+    unread_count = unread_notifs.count or 0
+
+    if unread_count > 0:
+        st.warning(f"🔔 **{unread_count}** nova(s) notificação(ões)!")
 
     st.divider()
 
@@ -182,13 +197,21 @@ with st.sidebar:
 
     # Navegação entre Módulos
     st.subheader("🧭 Navegação")
+
+    # Label dinâmico para a opção de perfil na sidebar
+    profile_label = (
+        f"👤 Perfil & Notificações ({unread_count})"
+        if unread_count > 0
+        else "👤 Perfil & Notificações"
+    )
+
     page_options = [
         "📁 Gestão de Projetos",
         "📝 Requisitos",
         "🧪 Módulo de Testes",
         "📌 Quadro Kanban",
         "📊 Métricas & Exportação",
-        "👤 Perfil & Notificações",
+        profile_label,
     ]
 
     if is_team_owner or is_master_user():
@@ -203,7 +226,11 @@ with st.sidebar:
 # 5. CARREGAMENTO DO PROJETO ATIVO
 # ==============================================================================
 active_project = None
-if page not in ["👥 Gestão de Equipe", "👑 Painel Admin Master", "👤 Perfil & Notificações"]:
+if page not in [
+    "👥 Gestão de Equipe",
+    "👑 Painel Admin Master",
+    profile_label,
+]:
     active_project = projects.render_project_selector()
 
     if not active_project and page in [
@@ -277,7 +304,7 @@ elif page == "📊 Métricas & Exportação":
         test_cases, bug_reports, risk_matrix, user_stories
     )
 
-elif page == "👤 Perfil & Notificações":
+elif page == profile_label:
     render_user_profile_page()
 
 elif page == "👥 Gestão de Equipe":

@@ -134,7 +134,10 @@ def render_bug_reports_tab(project_id: str):
                 for bug in b_list:
                     sev = bug.get("severity", "Média")
                     bug_status = bug.get('status', 'Aberto')
-                    sev_color = "🔴" if sev in ["Alta", "Crítica"] else ("🟡" if sev == "Média" else "🟢")
+                    
+                    # Mapeamento de cores igual ao Kanban:
+                    # Crítica = 🔴 | Alta = 🟠 | Média = 🟡 | Baixa/Outros = 🟢
+                    sev_color = "🔴" if sev == "Crítica" else ("🟠" if sev == "Alta" else ("🟡" if sev == "Média" else "🟢"))
                     
                     with st.expander(f"{sev_color} [{sev}] {bug.get('title')} - Status QA: `{bug_status}`"):
                         st.markdown(f"**Descrição:**\n\n{bug.get('description') or 'N/A'}")

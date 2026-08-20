@@ -23,6 +23,14 @@ def get_severity_badge(severity: str) -> str:
     return mapping.get(severity, "⚪ " + str(severity))
 
 
+def delete_attachment_from_storage(file_path: str):
+    """Função utilitária para remover um arquivo do bucket no Supabase Storage."""
+    try:
+        supabase.storage.from_("evidences").remove([file_path])
+    except Exception as e:
+        st.error(f"Erro ao deletar arquivo do storage: {e}")
+
+
 def render_kanban_board(project_id: str):
     st.title("📌 Quadro Kanban")
 
@@ -396,15 +404,30 @@ def render_kanban_board(project_id: str):
 
                     st.divider()
 
-                    # ANEXOS
+                    # ANEXOS (COM SUPORTE A REMOÇÃO)
                     st.markdown("**📎 Anexos:**")
                     attachments = card.get("attachments") or []
                     if attachments:
-                        for att in attachments:
+                        for idx_att, att in enumerate(attachments):
                             if isinstance(att, dict) and att.get("url"):
-                                st.markdown(
-                                    f"📄 [{att.get('name', 'Arquivo')}]({att.get('url')})"
-                                )
+                                col_att1, col_att2 = st.columns([5, 1])
+                                with col_att1:
+                                    st.markdown(
+                                        f"📄 [{att.get('name', 'Arquivo')}]({att.get('url')})"
+                                    )
+                                with col_att2:
+                                    if can_edit(user_info) and st.button(
+                                        "❌", key=f"del_att_{card['id']}_{idx_att}"
+                                    ):
+                                        if att.get("path"):
+                                            delete_attachment_from_storage(att["path"])
+                                        
+                                        updated_att = [a for i, a in enumerate(attachments) if i != idx_att]
+                                        supabase.table("kanban_cards").update(
+                                            {"attachments": updated_att}
+                                        ).eq("id", card["id"]).execute()
+                                        st.success("Anexo removido!")
+                                        st.rerun()
                     else:
                         st.caption("Nenhum anexo.")
 
@@ -439,7 +462,11 @@ def render_kanban_board(project_id: str):
                                     )
 
                                     updated_att = attachments + [
-                                        {"name": up_file.name, "url": file_url}
+                                        {
+                                            "name": up_file.name,
+                                            "url": file_url,
+                                            "path": file_path,
+                                        }
                                     ]
                                     supabase.table("kanban_cards").update(
                                         {"attachments": updated_att}
@@ -456,15 +483,20 @@ def render_kanban_board(project_id: str):
 
                     st.divider()
 
-                    # EXCLUSÃO RESTRITA
+                    # EXCLUSÃO RESTRITA DO CARD (E DE SEUS ANEXOS NO STORAGE)
                     if can_delete_items(user_info):
                         if st.button(
                             "🗑️ Excluir Card",
                             key=f"del_card_{card['id']}",
                             type="secondary",
                         ):
+                            # Remove todos os anexos associados ao card do Storage
+                            for att in attachments:
+                                if isinstance(att, dict) and att.get("path"):
+                                    delete_attachment_from_storage(att["path"])
+
                             supabase.table("kanban_cards").delete().eq(
                                 "id", card["id"]
                             ).execute()
-                            st.success("Card excluído!")
+                            st.success("Card e seus anexos foram excluídos!")
                             st.rerun()

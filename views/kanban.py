@@ -50,8 +50,13 @@ def render_kanban_board(project_id: str):
             row["users"] for row in (res.data or []) if row.get("users")
         ]
 
-    member_options = {m["name"]: m["id"] for m in team_members}
-    member_options["Não atribuído"] = None
+    # Garante "Não atribuído" como primeira opção
+    member_options = {"Não atribuído": None}
+    for m in team_members:
+        member_options[m["name"]] = m["id"]
+
+    # Map reverso para buscar nome via ID
+    id_to_name = {v: k for k, v in member_options.items() if v is not None}
 
     # 2. CARREGA AS COLUNAS
     cols_res = (
@@ -104,8 +109,9 @@ def render_kanban_board(project_id: str):
                         "Coluna Inicial", [c["name"] for c in columns_data]
                     )
                 with col_f3:
+                    # 'Não atribuído' vem pré-selecionado (index 0)
                     f_assignee = st.selectbox(
-                        "Atribuir a", list(member_options.keys())
+                        "Atribuir a", list(member_options.keys()), index=0
                     )
 
                 submitted = st.form_submit_button("Salvar Tarefa")
@@ -114,21 +120,40 @@ def render_kanban_board(project_id: str):
                     if not f_title.strip():
                         st.error("O título é obrigatório.")
                     else:
+                        assigned_id = member_options[f_assignee]
+                        now_str = datetime.datetime.now().strftime(
+                            "%d/%m/%Y %H:%M"
+                        )
+
+                        # Registra no histórico se for atribuído na criação
+                        initial_history = []
+                        if assigned_id:
+                            initial_history.append(
+                                {
+                                    "assignee_name": f_assignee,
+                                    "date": now_str,
+                                    "assigned_by": user_info.get(
+                                        "name", "Sistema"
+                                    ),
+                                }
+                            )
+
                         payload = {
                             "project_id": project_id,
                             "title": f_title.strip(),
                             "description": f_desc.strip(),
                             "severity": f_sev,
                             "status": f_col,
-                            "assignee_id": member_options[f_assignee],
+                            "assignee_id": assigned_id,
                             "comments": [],
                             "attachments": [],
+                            "assignment_history": initial_history,
                         }
                         supabase.table("kanban_cards").insert(payload).execute()
 
-                        if member_options[f_assignee]:
+                        if assigned_id:
                             notify_user(
-                                member_options[f_assignee],
+                                assigned_id,
                                 "Nova Tarefa Atribuída 📋",
                                 f"Você foi atribuído ao card: '{f_title}'",
                             )
@@ -214,20 +239,33 @@ def render_kanban_board(project_id: str):
 
     st.divider()
 
-    # 4. FILTROS
-    with st.expander("🔍 Filtros Avançados", expanded=False):
-        fl1, fl2, fl3 = st.columns(3)
-        with fl1:
-            filter_sev = st.multiselect(
-                "Filtrar por Severidade/Prioridade",
-                ["Baixa", "Média", "Alta", "Crítica"],
-            )
-        with fl2:
-            filter_assignee = st.multiselect(
-                "Filtrar por Atribuído", list(member_options.keys())
-            )
-        with fl3:
-            filter_search = st.text_input("Buscar por Título / Palavra-chave")
+    # 4. FILTROS E ORDENAÇÃO EXPLICITOS (SEM DROPDOWN / EXPANDER)
+    st.subheader("🔍 Filtros & Ordenação")
+    fl1, fl2, fl3, fl4 = st.columns([3, 3, 3, 3])
+
+    with fl1:
+        filter_search = st.text_input(
+            "🔎 Buscar por Título", placeholder="Digite uma palavra-chave..."
+        )
+    with fl2:
+        filter_sev = st.multiselect(
+            "🟢 Severidade / Prioridade",
+            ["Baixa", "Média", "Alta", "Crítica"],
+        )
+    with fl3:
+        filter_assignee = st.multiselect(
+            "👤 Atribuído a", list(member_options.keys())
+        )
+    with fl4:
+        sort_by = st.selectbox(
+            "⇅ Ordenar cards por",
+            [
+                "Mais recentes",
+                "Mais antigos",
+                "Prioridade (Crítica ➡️ Baixa)",
+                "Prioridade (Baixa ➡️ Crítica)",
+            ],
+        )
 
     # 5. CARREGA CARDS DO KANBAN
     cards_res = (
@@ -238,6 +276,7 @@ def render_kanban_board(project_id: str):
     )
     cards = cards_res.data or []
 
+    # Filtragem
     filtered_cards = []
     for c in cards:
         if filter_sev and c.get("severity") not in filter_sev:
@@ -255,6 +294,24 @@ def render_kanban_board(project_id: str):
         ):
             continue
         filtered_cards.append(c)
+
+    # Ordenação
+    sev_weights = {"Crítica": 4, "Alta": 3, "Média": 2, "Baixa": 1}
+    if sort_by == "Mais recentes":
+        filtered_cards.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    elif sort_by == "Mais antigos":
+        filtered_cards.sort(key=lambda x: x.get("created_at", ""))
+    elif sort_by == "Prioridade (Crítica ➡️ Baixa)":
+        filtered_cards.sort(
+            key=lambda x: sev_weights.get(x.get("severity", "Baixa"), 0),
+            reverse=True,
+        )
+    elif sort_by == "Prioridade (Baixa ➡️ Crítica)":
+        filtered_cards.sort(
+            key=lambda x: sev_weights.get(x.get("severity", "Baixa"), 0)
+        )
+
+    st.divider()
 
     # 6. EXIBIÇÃO DAS COLUNAS E CARDS
     ui_cols = st.columns(len(columns_data)) if columns_data else []
@@ -278,12 +335,17 @@ def render_kanban_board(project_id: str):
                 )
 
                 with st.expander(f"{badge} {card['title']}"):
-                    st.caption(f"**Atribuído:** {assigned_name}")
+                    st.caption(f"**Atribuído a:** {assigned_name}")
                     st.write(card.get("description") or "*Sem descrição*")
                     st.divider()
 
-                    tab_actions, tab_edit, tab_comments = st.tabs(
-                        ["⚡ Mover/Atribuir", "✏️ Editar", "💬 Comentários"]
+                    tab_actions, tab_history, tab_edit, tab_comments = st.tabs(
+                        [
+                            "⚡ Mover/Atribuir",
+                            "📜 Histórico",
+                            "✏️ Editar",
+                            "💬 Comentários",
+                        ]
                     )
 
                     with tab_actions:
@@ -317,21 +379,56 @@ def render_kanban_board(project_id: str):
                                 ),
                                 key=f"assign_{card['id']}",
                             )
+
                             if (
                                 member_options[new_assignee_key]
                                 != card.get("assignee_id")
                             ):
                                 new_uid = member_options[new_assignee_key]
+                                now_str = datetime.datetime.now().strftime(
+                                    "%d/%m/%Y %H:%M"
+                                )
+
+                                # Atualiza Histórico de Atribuições
+                                history = card.get("assignment_history") or []
+                                history.append(
+                                    {
+                                        "assignee_name": new_assignee_key,
+                                        "date": now_str,
+                                        "assigned_by": user_info.get(
+                                            "name", "Usuário"
+                                        ),
+                                    }
+                                )
+
                                 supabase.table("kanban_cards").update(
-                                    {"assignee_id": new_uid}
+                                    {
+                                        "assignee_id": new_uid,
+                                        "assignment_history": history,
+                                    }
                                 ).eq("id", card["id"]).execute()
+
                                 if new_uid:
                                     notify_user(
                                         new_uid,
                                         "Reatribuição de Tarefa 📋",
-                                        f"O card '{card['title']}' foi reatribuído a você.",
+                                        f"O card '{card['title']}' foi atribuído a você.",
                                     )
                                 st.rerun()
+
+                    with tab_history:
+                        history = card.get("assignment_history") or []
+                        if history:
+                            st.markdown("**📜 Histórico de Responsáveis:**")
+                            for h in reversed(history):
+                                st.write(
+                                    f"• **{h.get('assignee_name')}** em `{h.get('date')}`"
+                                )
+                                st.caption(
+                                    f"Atribuído por: {h.get('assigned_by', 'Desconhecido')}"
+                                )
+                        else:
+                            st.caption("Nenhum histórico de atribuição.")
 
                     with tab_edit:
                         if can_edit(user_info):
@@ -404,7 +501,7 @@ def render_kanban_board(project_id: str):
 
                     st.divider()
 
-                    # ANEXOS (COM SUPORTE A REMOÇÃO E LIMITE DE 10MB)
+                    # ANEXOS
                     st.markdown("**📎 Anexos:**")
                     st.caption("Limite máximo: 10 MB por arquivo")
 
@@ -490,7 +587,7 @@ def render_kanban_board(project_id: str):
 
                     st.divider()
 
-                    # EXCLUSÃO RESTRITA DO CARD (E DE SEUS ANEXOS NO STORAGE)
+                    # EXCLUSÃO RESTRITA DO CARD
                     if can_delete_items(user_info):
                         if st.button(
                             "🗑️ Excluir Card",

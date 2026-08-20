@@ -251,7 +251,7 @@ def render_bug_reports_tab(project_id: str):
         for b_cycle_name, b_list in grouped_bugs.items():
             with st.expander(
                 f"📦 **Ciclo / Release: {b_cycle_name}** ({len(b_list)} bugs)",
-                expanded=True,
+                expanded=False,
             ):
                 for bug in b_list:
                     sev = bug.get("severity", "Média")

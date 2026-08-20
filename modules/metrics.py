@@ -159,39 +159,39 @@ def render_metrics_dashboard(
                     st.warning(f"Falha na consulta à IA. Exibindo diagnóstico algorítmico local. ({e})")
 
     if st.session_state["ai_analysis_result"]:
-    st.info(st.session_state["ai_analysis_result"])
-else:
-    # Algoritmo Local de Avaliação de Risco
-    if high_risks > 2 or bugs_critical_open > 0 or pass_rate < 60.0 or weighted_defect_score >= 12:
-        risk_badge = "🔴 ALTO RISCO PARA DEPLOY"
-        card_border = "#EF4444"
-        card_bg = "rgba(239, 68, 68, 0.12)"
-    elif bugs_open > 0 or failed_tc > 0 or blocked_tc > 0 or execution_rate < 80.0:
-        risk_badge = "🟡 MÉDIO RISCO PARA DEPLOY"
-        card_border = "#F59E0B"
-        card_bg = "rgba(245, 158, 11, 0.12)"
+        st.info(st.session_state["ai_analysis_result"])
     else:
-        risk_badge = "🟢 BAIXO RISCO PARA DEPLOY"
-        card_border = "#10B981"
-        card_bg = "rgba(16, 185, 129, 0.12)"
+        # Algoritmo Local de Avaliação de Risco
+        if high_risks > 2 or bugs_critical_open > 0 or pass_rate < 60.0 or weighted_defect_score >= 12:
+            risk_badge = "🔴 ALTO RISCO PARA DEPLOY"
+            card_border = "#EF4444"
+            card_bg = "rgba(239, 68, 68, 0.12)"
+        elif bugs_open > 0 or failed_tc > 0 or blocked_tc > 0 or execution_rate < 80.0:
+            risk_badge = "🟡 MÉDIO RISCO PARA DEPLOY"
+            card_border = "#F59E0B"
+            card_bg = "rgba(245, 158, 11, 0.12)"
+        else:
+            risk_badge = "🟢 BAIXO RISCO PARA DEPLOY"
+            card_border = "#10B981"
+            card_bg = "rgba(16, 185, 129, 0.12)"
 
-    st.markdown(f"""
-    <div style="background-color: {card_bg}; padding: 18px; border-radius: 8px; border-left: 4px solid {card_border}; margin-bottom: 20px;">
-        <div style="font-size: 15px; font-weight: 600; color: var(--text-color, #FAFAFA); margin-bottom: 8px;">
-            📊 Avaliação Algorítmica da Release
+        st.markdown(f"""
+        <div style="background-color: {card_bg}; padding: 18px; border-radius: 8px; border-left: 4px solid {card_border}; margin-bottom: 20px;">
+            <div style="font-size: 15px; font-weight: 600; color: var(--text-color, #FAFAFA); margin-bottom: 8px;">
+                📊 Avaliação Algorítmica da Release
+            </div>
+            <div style="font-size: 14px; margin-bottom: 12px; color: var(--text-color, #FAFAFA);">
+                <b>Parecer Técnico:</b> &nbsp; <code>{risk_badge}</code>
+            </div>
+            <div style="font-size: 13.5px; line-height: 1.7; color: rgba(255, 255, 255, 0.85);">
+                • <b style="color: #FFFFFF;">Progresso da Suíte:</b> {execution_rate:.1f}% executado ({passed_tc} aprovados de {executed_tc} testados). Taxa de Sucesso: <b style="color: #FFFFFF;">{pass_rate:.1f}%</b>.<br>
+                • <b style="color: #FFFFFF;">Saúde dos Defeitos:</b> {bugs_total_mapped} total de bugs reportados na release — <b style="color: #FFFFFF;">{bugs_closed} resolvidos ({fix_rate:.1f}%)</b> e {bugs_open} ativos ({bugs_critical_open} graves).<br>
+                • <b style="color: #FFFFFF;">Gravidade Acumulada (PDR):</b> {weighted_defect_score} pontos de severidade ativa.
+            </div>
         </div>
-        <div style="font-size: 14px; margin-bottom: 12px; color: var(--text-color, #FAFAFA);">
-            <b>Parecer Técnico:</b> &nbsp; <code>{risk_badge}</code>
-        </div>
-        <div style="font-size: 13.5px; line-height: 1.7; color: rgba(255, 255, 255, 0.85);">
-            • <b style="color: #FFFFFF;">Progresso da Suíte:</b> {execution_rate:.1f}% executado ({passed_tc} aprovados de {executed_tc} testados). Taxa de Sucesso: <b style="color: #FFFFFF;">{pass_rate:.1f}%</b>.<br>
-            • <b style="color: #FFFFFF;">Saúde dos Defeitos:</b> {bugs_total_mapped} total de bugs reportados na release — <b style="color: #FFFFFF;">{bugs_closed} resolvidos ({fix_rate:.1f}%)</b> e {bugs_open} ativos ({bugs_critical_open} graves).<br>
-            • <b style="color: #FFFFFF;">Gravidade Acumulada (PDR):</b> {weighted_defect_score} pontos de severidade ativa.
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
-st.divider()
+    st.divider()
 
     # --------------------------------------------------------------------------
     # 3. KPIS PRINCIPAIS (COM DELTAS E MÉTRICAS RELATIVAS)

@@ -67,7 +67,7 @@ def export_to_markdown(data: list[dict], title: str = "Relatório", is_bug_repor
 
 
 def export_to_html(data: list[dict], title: str = "Relatório", is_bug_report: bool = False) -> str:
-    """Converte em HTML idêntico à tela do software (com suporte automático a Dark/Light mode)."""
+    """Converte em HTML com suporte a Dark/Light mode."""
     if not data:
         return f"<!DOCTYPE html><html><body><h2>{title}</h2><p>Nenhum dado disponível.</p></body></html>"
 
@@ -270,7 +270,7 @@ def export_to_html(data: list[dict], title: str = "Relatório", is_bug_report: b
 </body>
 </html>
 """
-    return html_content  # 👈 ADICIONADO: Retorno explícito para evitar AttributeError no Streamlit
+    return html_content
 
 
 def export_metrics_to_html(
@@ -292,32 +292,36 @@ def export_metrics_to_html(
     fig_type=None,
     fig_risks=None,
 ) -> str:
-    """Gera um relatório executivo de métricas em HTML com gráficos totalmente incorporados."""
+    """Gera um relatório executivo de métricas em HTML com gráficos Plotly 100% embarcados."""
 
-    rate_color = "#2E7D32" if rate >= 80 else ("#ED6C02" if rate >= 60 else "#D32F2F")
-    bugs_color = "#D32F2F" if bugs_open > 0 else "#2E7D32"
+    rate_color = "#22C55E" if rate >= 80 else ("#F59E0B" if rate >= 60 else "#EF4444")
+    bugs_color = "#EF4444" if bugs_open > 0 else "#22C55E"
 
     def fig_to_html_div(fig):
         if fig is None:
-            return '<div class="graph-box" style="display:flex;align-items:center;justify-content:center;height:250px;color:#A0AEC0;">Sem dados para exibir</div>'
-        
+            return '<div class="graph-box empty-box">Sem dados para exibir este gráfico</div>'
+
         try:
-            # Força o fundo limpo para o relatório exportado
-            fig.update_layout(
+            # 1. Ajuste de layout garantindo fundo limpo e dimensões visíveis na impressão e tela
+            fig_copy = pio.from_json(pio.to_json(fig))
+            fig_copy.update_layout(
                 paper_bgcolor="rgba(0,0,0,0)",
                 plot_bgcolor="rgba(0,0,0,0)",
-                template="plotly_white"
+                autosize=True,
+                height=350,
+                margin=dict(t=40, b=30, l=30, r=30)
             )
-            # Converte com div responsiva
+
+            # 2. Converte garantindo a inclusão das dependências de renderização
             div_html = pio.to_html(
-                fig,
-                include_plotlyjs=False,
+                fig_copy,
+                include_plotlyjs=False,  # O script global Plotly no head cuidará da renderização
                 full_html=False,
                 config={"responsive": True, "displayModeBar": False},
             )
             return f'<div class="graph-box">{div_html}</div>'
         except Exception as e:
-            return f'<div class="graph-box" style="color:#E53E3E;padding:20px;">Não foi possível renderizar o gráfico ({e})</div>'
+            return f'<div class="graph-box error-box">Não foi possível renderizar o gráfico ({e})</div>'
 
     html_fig_tc = fig_to_html_div(fig_tc)
     html_fig_bugs = fig_to_html_div(fig_bugs)
@@ -331,6 +335,7 @@ def export_metrics_to_html(
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Relatório Executivo de QA - {scope_label}</title>
+    <!-- JS do Plotly carregado antes do corpo do documento para garantir renderização imediata -->
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
         :root {{
@@ -339,23 +344,23 @@ def export_metrics_to_html(
             --title-color: #1A202C;
             --card-bg: #FFFFFF;
             --card-border: #E2E8F0;
-            --card-shadow: rgba(0, 0, 0, 0.03);
-            --primary-color: #3182CE;
-            --primary-bg-light: #EBF8FF;
-            --block-bg: #EDF2F7;
+            --card-shadow: rgba(0, 0, 0, 0.04);
+            --primary-color: #3B82F6;
+            --primary-bg-light: #EFF6FF;
+            --block-bg: #F1F5F9;
         }}
 
         @media (prefers-color-scheme: dark) {{
             :root {{
-                --bg-color: #12161A;
-                --text-color: #CBD5E0;
-                --title-color: #F7FAFC;
-                --card-bg: #1A202C;
-                --card-border: #2D3748;
-                --card-shadow: rgba(0, 0, 0, 0.2);
-                --primary-color: #63B3ED;
-                --primary-bg-light: #1A2634;
-                --block-bg: #2D3748;
+                --bg-color: #0F172A;
+                --text-color: #CBD5E1;
+                --title-color: #F8FAFC;
+                --card-bg: #1E293B;
+                --card-border: #334155;
+                --card-shadow: rgba(0, 0, 0, 0.3);
+                --primary-color: #60A5FA;
+                --primary-bg-light: #1E3A8A;
+                --block-bg: #1E293B;
             }}
         }}
 
@@ -364,7 +369,7 @@ def export_metrics_to_html(
             color: var(--text-color);
             background-color: var(--bg-color);
             padding: 30px;
-            max-width: 1000px;
+            max-width: 1080px;
             margin: 0 auto;
             line-height: 1.6;
         }}
@@ -381,14 +386,14 @@ def export_metrics_to_html(
             background: var(--primary-bg-light);
             color: var(--primary-color);
             border: 1px solid var(--primary-color);
-            padding: 5px 12px;
+            padding: 5px 14px;
             border-radius: 16px;
             font-size: 13px;
-            font-weight: 500;
+            font-weight: 600;
         }}
         .kpi-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 15px;
             margin-bottom: 25px;
         }}
@@ -400,8 +405,8 @@ def export_metrics_to_html(
             text-align: center;
             box-shadow: 0 2px 4px var(--card-shadow);
         }}
-        .kpi-title {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.75; font-weight: 600; }}
-        .kpi-value {{ font-size: 26px; font-weight: 700; margin: 6px 0; color: var(--primary-color); }}
+        .kpi-title {{ font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; opacity: 0.8; font-weight: 600; }}
+        .kpi-value {{ font-size: 28px; font-weight: 700; margin: 6px 0; color: var(--primary-color); }}
         .section-card {{
             background: var(--card-bg);
             border: 1px solid var(--card-border);
@@ -414,34 +419,47 @@ def export_metrics_to_html(
         .analysis-content {{
             white-space: pre-wrap;
             background: var(--block-bg);
-            padding: 14px;
-            border-left: 3px solid var(--primary-color);
-            border-radius: 4px;
+            padding: 16px;
+            border-left: 4px solid var(--primary-color);
+            border-radius: 6px;
             font-size: 13.5px;
         }}
         .charts-grid {{
             display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-bottom: 20px;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-bottom: 25px;
         }}
         .graph-box {{
             background: var(--card-bg);
             border: 1px solid var(--card-border);
             border-radius: 8px;
-            padding: 10px;
+            padding: 12px;
             box-shadow: 0 2px 4px var(--card-shadow);
-            overflow: hidden;
-            min-height: 300px;
+            min-height: 360px;
+            width: 100%;
+            box-sizing: border-box;
+        }}
+        .empty-box {{
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94A3B8;
+            font-size: 13px;
+        }}
+        .error-box {{
+            color: #EF4444;
+            padding: 15px;
+            font-size: 13px;
         }}
         ul.detail-list {{ padding-left: 20px; margin: 0; }}
-        ul.detail-list li {{ margin-bottom: 6px; font-size: 13.5px; }}
-        .footer {{ text-align: center; font-size: 12px; opacity: 0.5; margin-top: 30px; }}
+        ul.detail-list li {{ margin-bottom: 8px; font-size: 13.5px; }}
+        .footer {{ text-align: center; font-size: 12px; opacity: 0.6; margin-top: 35px; }}
         
         @media print {{
             body {{ padding: 0; background: #FFF; color: #000; }}
-            .charts-grid {{ page-break-inside: avoid; display: block; }}
-            .graph-box {{ page-break-inside: avoid; margin-bottom: 15px; }}
+            .charts-grid {{ display: block; }}
+            .graph-box {{ page-break-inside: avoid; margin-bottom: 20px; }}
         }}
     </style>
 </head>
@@ -458,18 +476,18 @@ def export_metrics_to_html(
             <small>{passed_tc} de {total_tc} testes passados</small>
         </div>
         <div class="kpi-card">
-            <div class="kpi-title">Bugs Abertos</div>
+            <div class="kpi-title">Bugs Abertos (Release)</div>
             <div class="kpi-value" style="color: {bugs_color};">{bugs_open}</div>
-            <small>{bugs_total} bugs cadastrados</small>
+            <small>{bugs_closed} de {bugs_total} resolvidos</small>
         </div>
         <div class="kpi-card">
-            <div class="kpi-title">Testes Com Falha</div>
-            <div class="kpi-value" style="color: #D32F2F;">{failed_tc}</div>
+            <div class="kpi-title">Testes com Falha</div>
+            <div class="kpi-value" style="color: #EF4444;">{failed_tc}</div>
             <small>{blocked_tc} bloqueados / {unexecuted_tc} pendentes</small>
         </div>
         <div class="kpi-card">
             <div class="kpi-title">Riscos Críticos</div>
-            <div class="kpi-value" style="color: #E53E3E;">{high_risks}</div>
+            <div class="kpi-value" style="color: #EF4444;">{high_risks}</div>
             <small>Score de Risco &ge; 15</small>
         </div>
     </div>
@@ -479,7 +497,8 @@ def export_metrics_to_html(
         <div class="analysis-content">{analysis_text}</div>
     </div>
 
-    <h2 style="font-size: 18px; color: var(--title-color); margin-top: 25px; margin-bottom: 15px;">📈 Painel de Gráficos de Qualidade</h2>
+    <h2 style="font-size: 18px; color: var(--title-color); margin-top: 25px; margin-bottom: 15px;">📈 Painel de Gráficos da Release</h2>
+    
     <div class="charts-grid">
         {html_fig_tc}
         {html_fig_bugs}
@@ -487,17 +506,19 @@ def export_metrics_to_html(
         {html_fig_type}
     </div>
 
-    {f'<div style="margin-bottom: 20px;">{html_fig_risks}</div>' if html_fig_risks else ""}
+    {f'<div class="section-card"><h2 class="section-title">⚠️ Matriz de Riscos Globais</h2>{html_fig_risks}</div>' if html_fig_risks else ""}
 
     <div class="section-card">
-        <h2 class="section-title">📋 Resumo de Execução do Escopo</h2>
+        <h2 class="section-title">📋 Resumo Detalhado da Release</h2>
         <ul class="detail-list">
-            <li><b>Total de Casos de Teste:</b> {total_tc}</li>
+            <li><b>Total de Casos de Teste Mapeados:</b> {total_tc}</li>
             <li><b>Aprovados (Passou):</b> {passed_tc}</li>
             <li><b>Falhas Detectadas:</b> {failed_tc}</li>
             <li><b>Bloqueios de Execução:</b> {blocked_tc}</li>
             <li><b>Pendentes de Execução:</b> {unexecuted_tc}</li>
-            <li><b>Bugs Resolvidos / Corrigidos:</b> {bugs_closed}</li>
+            <li><b>Total de Bugs Registrados na Release:</b> {bugs_total}</li>
+            <li><b>Bugs Resolvidos / Fechados:</b> {bugs_closed}</li>
+            <li><b>Bugs Pendentes (Ativos):</b> {bugs_open}</li>
         </ul>
     </div>
 

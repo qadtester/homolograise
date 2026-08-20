@@ -220,7 +220,19 @@ with st.sidebar:
     if is_master_user():
         page_options.append("👑 Painel Admin Master")
 
-    page = st.radio("Ir para:", page_options)
+    # AJUSTE CHAVE: Define e preserva a chave no session_state para manter a navegação
+    if "navigation_page" not in st.session_state:
+        st.session_state["navigation_page"] = page_options[0]
+
+    # Garante que o valor armazenado continua válido na lista de opções
+    if st.session_state["navigation_page"] not in page_options:
+        st.session_state["navigation_page"] = page_options[0]
+
+    page = st.radio(
+        "Ir para:",
+        options=page_options,
+        key="navigation_page"
+    )
 
 # ==============================================================================
 # 5. CARREGAMENTO DO PROJETO ATIVO

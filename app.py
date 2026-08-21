@@ -3,9 +3,9 @@ from config.ai_config import is_master_user, render_ai_provider_selector
 from config.database import supabase
 from modules import admin_panel, auth, metrics, projects, requirements, testing
 
-# IMPORTAÇÃO DOS MÓDULOS
+# IMPORTAÇÃO DOS MÓDULOS (Importando as duas funções separadas)
 from views.kanban import render_kanban_board
-from views.profile import render_user_profile_page
+from views.profile import render_notifications_page, render_user_profile_page
 
 # ==============================================================================
 # 1. CONFIGURAÇÃO DA PÁGINA
@@ -198,12 +198,13 @@ with st.sidebar:
     # Navegação entre Módulos
     st.subheader("🧭 Navegação")
 
-    # Label dinâmico para a opção de perfil na sidebar
-    profile_label = (
-        f"👤 Perfil & Notificações ({unread_count})"
+    # LABELS SEPARADOS PARA NOTIFICAÇÕES E PERFIL
+    notif_label = (
+        f"🔔 Central de Notificações ({unread_count})"
         if unread_count > 0
-        else "👤 Perfil & Notificações"
+        else "🔔 Central de Notificações"
     )
+    profile_label = "🔒 Meu Perfil / Senha"
 
     page_options = [
         "📁 Gestão de Projetos",
@@ -211,6 +212,7 @@ with st.sidebar:
         "🧪 Módulo de Testes",
         "📌 Quadro Kanban",
         "📊 Métricas & Exportação",
+        notif_label,
         profile_label,
     ]
 
@@ -220,7 +222,7 @@ with st.sidebar:
     if is_master_user():
         page_options.append("👑 Painel Admin Master")
 
-    # AJUSTE CHAVE: Define e preserva a chave no session_state para manter a navegação
+    # Define e preserva a chave no session_state para manter a navegação
     if "navigation_page" not in st.session_state:
         st.session_state["navigation_page"] = page_options[0]
 
@@ -229,9 +231,7 @@ with st.sidebar:
         st.session_state["navigation_page"] = page_options[0]
 
     page = st.radio(
-        "Ir para:",
-        options=page_options,
-        key="navigation_page"
+        "Ir para:", options=page_options, key="navigation_page"
     )
 
 # ==============================================================================
@@ -241,6 +241,7 @@ active_project = None
 if page not in [
     "👥 Gestão de Equipe",
     "👑 Painel Admin Master",
+    notif_label,
     profile_label,
 ]:
     active_project = projects.render_project_selector()
@@ -315,6 +316,9 @@ elif page == "📊 Métricas & Exportação":
     metrics.render_metrics_dashboard(
         test_cases, bug_reports, risk_matrix, user_stories
     )
+
+elif page == notif_label:
+    render_notifications_page()
 
 elif page == profile_label:
     render_user_profile_page()

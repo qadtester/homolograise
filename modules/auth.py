@@ -21,7 +21,8 @@ def logout():
 
 def render_auth_page():
     """Exibe a interface gráfica de autenticação (Login e Cadastro)."""
-    st.title("🔐 QA & Requisitos Hub")
+    st.title("🔐 RAISE")
+    st.subtitle("Requirements, Assurance, Intelligence, Software Engineering")
 
     if "logged_in" not in st.session_state:
         st.session_state["logged_in"] = False

@@ -5,7 +5,7 @@ from utils.export import export_to_csv, export_to_markdown
 from utils.permissions import can_create, can_edit, can_delete_items
 
 def render_requirements_module():
-    st.header("📋 QA & Requisitos Hub - Gerenciamento de Requisitos e Riscos")
+    st.header("📋 RISE - Gerenciamento de Requisitos e Riscos")
 
     user_info = st.session_state.get("user")
     project_id = st.session_state.get('current_project_id')

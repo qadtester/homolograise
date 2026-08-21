@@ -11,7 +11,7 @@ from views.profile import render_notifications_page, render_user_profile_page
 # 1. CONFIGURAÇÃO DA PÁGINA
 # ==============================================================================
 st.set_page_config(
-    page_title="QA & Requisitos Hub",
+    page_title="RISE",
     page_icon="🎯",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -87,7 +87,7 @@ user_info["is_master"] = is_master_user()
 # 4. SIDEBAR (PERFIL, SELETOR DE EQUIPE, PROJETO E NAVEGAÇÃO)
 # ==============================================================================
 with st.sidebar:
-    st.title("🎯 QA Hub")
+    st.title("🎯 RISE")
 
     st.write(f"👤 **Usuário:** {user_info.get('name', 'Usuário')}")
     st.caption(f"📧 {user_info.get('email', '')}")

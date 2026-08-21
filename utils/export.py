@@ -62,7 +62,7 @@ def export_to_markdown(data: list[dict], title: str = "Relatório", is_bug_repor
             md_content += f"**Resultado Esperado:**\n\n{expected}\n\n"
             md_content += "---\n\n"
 
-    md_content += "*Gerado automaticamente pelo QA & Requisitos Hub*"
+    md_content += "*Gerado automaticamente pelo RISE*"
     return md_content
 
 
@@ -523,7 +523,7 @@ def export_metrics_to_html(
     </div>
 
     <div class="footer">
-        Gerado pela plataforma QA & Requisitos Hub
+        Gerado pela plataforma RISE
     </div>
 </body>
 </html>"""

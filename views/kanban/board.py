@@ -1,6 +1,6 @@
 import streamlit as st
 from utils.permissions import can_delete_items, can_edit
-from kanban_service import (
+from services.kanban_service import (
     add_comment,
     delete_card_with_attachments,
     get_kanban_cards,

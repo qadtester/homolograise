@@ -6,6 +6,7 @@ from utils.permissions import can_create, can_delete_items, can_edit
 
 # Mapeamento de prioridade para a ordenação por Severidade/Criticidade
 SEVERITY_ORDER = {"Crítica": 1, "Alta": 2, "Média": 3, "Baixa": 4}
+SEVERITY_OPTIONS = ["Baixa", "Média", "Alta", "Crítica"]
 
 
 def create_kanban_card_from_bug(
@@ -48,10 +49,11 @@ def render_bug_reports_tab(project_id: str):
     user_info = st.session_state.get("user", {})
 
     bug_cycle_input = st.text_input(
-        "🏷️ Ciclo de Teste do Bug / Release (para novos registros)",
+        "🏷️ Ciclo de Teste do Bug / Release (para novos registros ou duplicações)",
         value="",
-        placeholder="Ex: Release 1.0...",
+        placeholder="Ex: Release 1.0, Sprint 12, Pós-Deploy v1.1",
         key="bug_active_cycle_input",
+        help="Preencha este campo caso vá criar, gerar por IA ou duplicar bugs para um novo ciclo.",
     )
     active_bug_cycle = bug_cycle_input.strip()
 
@@ -127,7 +129,7 @@ def render_bug_reports_tab(project_id: str):
                 with st.form("bug_report_form", clear_on_submit=True):
                     title = st.text_input("Título do Bug *")
                     severity = st.selectbox(
-                        "Severidade *", ["Baixa", "Média", "Alta", "Crítica"]
+                        "Severidade *", SEVERITY_OPTIONS
                     )
                     description = st.text_area("Descrição do Problema")
                     steps = st.text_area("Passos para Reproduzir *")
@@ -214,7 +216,7 @@ def render_bug_reports_tab(project_id: str):
     with col_bf3:
         bug_severity_filter = st.selectbox(
             "Filtrar por Severidade:",
-            ["Todos", "Baixa", "Média", "Alta", "Crítica"],
+            ["Todos"] + SEVERITY_OPTIONS,
             key="bug_severity_filter_select",
         )
 
@@ -232,9 +234,6 @@ def render_bug_reports_tab(project_id: str):
     if not bugs:
         st.info("Nenhum bug registrado.")
     else:
-        # APLICAÇÃO DA REGRA DE ORDENAÇÃO:
-        # 1. Ordem por Severidade/Criticidade: Crítica -> Alta -> Média -> Baixa
-        # 2. Ordem Alfabética (A-Z) do Título dentro de cada Severidade
         bugs.sort(
             key=lambda x: (
                 SEVERITY_ORDER.get(x.get("severity"), 99),
@@ -257,8 +256,6 @@ def render_bug_reports_tab(project_id: str):
                     sev = bug.get("severity", "Média")
                     bug_status = bug.get("status", "Aberto")
 
-                    # Mapeamento de cores igual ao Kanban:
-                    # Crítica = 🔴 | Alta = 🟠 | Média = 🟡 | Baixa/Outros = 🟢
                     sev_color = (
                         "🔴"
                         if sev == "Crítica"
@@ -326,24 +323,64 @@ def render_bug_reports_tab(project_id: str):
                                     "✏️ Editar",
                                     key=f"pop_edit_bug_{bug['id']}",
                                 ):
+                                    st.markdown("### ✏️ Editar Bug Report")
                                     e_title = st.text_input(
-                                        "Título",
+                                        "Título *",
                                         value=bug["title"],
                                         key=f"e_b_t_{bug['id']}",
+                                    )
+                                    e_cycle = st.text_input(
+                                        "Ciclo / Release",
+                                        value=bug.get("test_cycle", ""),
+                                        key=f"e_b_c_{bug['id']}",
+                                        help="Altere a Release/Ciclo deste Bug.",
+                                    )
+                                    sev_idx = (
+                                        SEVERITY_OPTIONS.index(sev)
+                                        if sev in SEVERITY_OPTIONS
+                                        else 1
+                                    )
+                                    e_severity = st.selectbox(
+                                        "Severidade",
+                                        SEVERITY_OPTIONS,
+                                        index=sev_idx,
+                                        key=f"e_b_sev_{bug['id']}",
                                     )
                                     e_desc = st.text_area(
                                         "Descrição",
                                         value=bug.get("description", ""),
                                         key=f"e_b_d_{bug['id']}",
                                     )
+                                    e_steps = st.text_area(
+                                        "Passos para Reproduzir",
+                                        value=bug.get("steps", ""),
+                                        key=f"e_b_st_{bug['id']}",
+                                    )
+                                    e_expected = st.text_area(
+                                        "Comportamento Esperado",
+                                        value=bug.get("expected_behavior", ""),
+                                        key=f"e_b_exp_{bug['id']}",
+                                    )
+                                    e_actual = st.text_area(
+                                        "Comportamento Atual",
+                                        value=bug.get("actual_behavior", ""),
+                                        key=f"e_b_act_{bug['id']}",
+                                    )
+
                                     if st.button(
-                                        "Salvar Edições",
+                                        "💾 Salvar Edições",
                                         key=f"btn_bug_edit_{bug['id']}",
+                                        type="primary",
                                     ):
                                         supabase.table("bug_reports").update(
                                             {
-                                                "title": e_title,
-                                                "description": e_desc,
+                                                "title": e_title.strip(),
+                                                "test_cycle": e_cycle.strip(),
+                                                "severity": e_severity,
+                                                "description": e_desc.strip(),
+                                                "steps": e_steps.strip(),
+                                                "expected_behavior": e_expected.strip(),
+                                                "actual_behavior": e_actual.strip(),
                                             }
                                         ).eq("id", bug["id"]).execute()
                                         st.rerun()
@@ -352,12 +389,28 @@ def render_bug_reports_tab(project_id: str):
                             if can_edit(user_info) and st.button(
                                 "📋 Duplicar", key=f"btn_bug_clone_{bug['id']}"
                             ):
+                                target_cycle = (
+                                    active_bug_cycle
+                                    if active_bug_cycle
+                                    else bug.get("test_cycle")
+                                )
+
                                 bug_clone_payload = {
-                                    **bug,
+                                    "project_id": bug.get("project_id"),
                                     "title": f"{bug['title']} (Cópia)",
+                                    "description": bug.get("description", ""),
+                                    "severity": bug.get("severity", "Média"),
+                                    "steps": bug.get("steps", ""),
+                                    "expected_behavior": bug.get(
+                                        "expected_behavior", ""
+                                    ),
+                                    "actual_behavior": bug.get(
+                                        "actual_behavior", ""
+                                    ),
                                     "status": "Aberto",
+                                    "test_cycle": target_cycle,
                                 }
-                                bug_clone_payload.pop("id", None)
+
                                 res = (
                                     supabase.table("bug_reports")
                                     .insert(bug_clone_payload)
@@ -368,10 +421,8 @@ def render_bug_reports_tab(project_id: str):
                                         project_id,
                                         res.data[0]["id"],
                                         bug_clone_payload["title"],
-                                        bug_clone_payload.get(
-                                            "description", ""
-                                        ),
-                                        sev,
+                                        bug_clone_payload["description"],
+                                        bug_clone_payload["severity"],
                                     )
                                 st.rerun()
 

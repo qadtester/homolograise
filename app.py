@@ -273,7 +273,20 @@ elif page == "🧪 Módulo de Testes":
     testing.render_testing_module(active_project["id"])
 
 elif page == "📌 Quadro Kanban":
-    render_kanban_board(active_project["id"])
+    # Buscar membros da equipe ativa para associar tarefas/cards
+    team_members = []
+    if active_team and active_team.get("id"):
+        members_res = (
+            supabase.table("team_members")
+            .select("users(id, name, email)")
+            .eq("team_id", active_team["id"])
+            .execute()
+        )
+        if members_res.data:
+            team_members = [m["users"] for m in members_res.data if m.get("users")]
+
+    # Chama o Kanban com os 3 argumentos esperados
+    render_kanban_board(supabase, active_project["id"], team_members)
 
 elif page == "📊 Métricas & Exportação":
     project_id = active_project["id"]

@@ -25,10 +25,10 @@ def render_test_cases_tab(project_id: str):
     col_c1, col_c2 = st.columns([2, 1])
     with col_c1:
         current_cycle = st.text_input(
-            "🏷️ Ciclo de Teste / Release (para novas criações)",
+            "🏷️ Ciclo de Teste / Release (para novas criações ou duplicações)",
             value="",
             placeholder="Ex: Release 1.0, Sprint 12, Pós-Deploy v1.1",
-            help="Preencha este campo caso vá criar ou gerar novos casos de teste.",
+            help="Preencha este campo caso vá criar, gerar por IA ou duplicar casos de teste para um novo ciclo.",
         )
     active_cycle = current_cycle.strip()
 
@@ -263,9 +263,6 @@ def render_test_cases_tab(project_id: str):
     if not test_cases:
         st.info("Nenhum caso de teste encontrado.")
     else:
-        # APLICAÇÃO DA REGRA DE ORDENAÇÃO:
-        # 1. Ordem de Status: Não Executado -> Passou -> Bloqueado -> Falhou
-        # 2. Ordem Alfabética (A-Z) do Título dentro de cada Status
         test_cases.sort(
             key=lambda x: (
                 STATUS_ORDER.get(x.get("status"), 99),
@@ -352,6 +349,12 @@ def render_test_cases_tab(project_id: str):
                                             value=tc["title"],
                                             key=f"e_tc_t_{tc['id']}",
                                         )
+                                        e_cycle = st.text_input(
+                                            "Ciclo / Release",
+                                            value=tc.get("test_cycle", ""),
+                                            key=f"e_tc_c_{tc['id']}",
+                                            help="Altere o ciclo/release deste teste.",
+                                        )
                                         e_steps = st.text_area(
                                             "Passos",
                                             value=tc.get("steps", ""),
@@ -369,26 +372,36 @@ def render_test_cases_tab(project_id: str):
                                             supabase.table("test_cases").update(
                                                 {
                                                     "title": e_title,
+                                                    "test_cycle": e_cycle.strip(),
                                                     "steps": e_steps,
                                                     "expected_result": e_exp,
                                                 }
                                             ).eq("id", tc["id"]).execute()
                                             st.rerun()
+
                             with c_clone:
                                 if can_edit(user_info) and st.button(
                                     "📋 Duplicar", key=f"btn_tc_clone_{tc['id']}"
                                 ):
+                                    # Usa o ciclo preenchido no topo (active_cycle) se houver; caso contrário, mantém o ciclo original
+                                    target_cycle = active_cycle if active_cycle else tc.get("test_cycle")
+                                    
                                     clone_payload = {
-                                        **tc,
-                                        "id": None,
+                                        "project_id": tc.get("project_id"),
+                                        "test_type": tc.get("test_type"),
                                         "title": f"{tc['title']} (Cópia)",
+                                        "preconditions": tc.get("preconditions"),
+                                        "steps": tc.get("steps"),
+                                        "expected_result": tc.get("expected_result"),
                                         "status": "Não Executado",
+                                        "test_cycle": target_cycle,
                                     }
-                                    clone_payload.pop("id", None)
+                                    
                                     supabase.table("test_cases").insert(
                                         clone_payload
                                     ).execute()
                                     st.rerun()
+
                             with c_del:
                                 if can_delete_items(user_info) and st.button(
                                     "🗑️ Excluir",

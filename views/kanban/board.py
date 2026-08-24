@@ -12,7 +12,7 @@ from services.kanban_service import (
     update_card_status,
     upload_attachment_to_card,
 )
-from modals import render_create_card_modal, render_manage_columns_modal
+from .modals import render_create_card_modal, render_manage_columns_modal
 
 
 def get_severity_badge(severity: str) -> str:

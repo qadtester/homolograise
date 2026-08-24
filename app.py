@@ -4,7 +4,8 @@ from config.database import supabase
 from modules import admin_panel, auth, metrics, projects, requirements, testing
 
 # IMPORTAÇÃO DOS MÓDULOS (Importando as duas funções separadas)
-from views.kanban import render_kanban_board
+#from views.kanban import render_kanban_board
+from views.kanban.board import render_kanban_board
 from views.profile import render_notifications_page, render_user_profile_page
 
 # ==============================================================================

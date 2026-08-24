@@ -1,5 +1,5 @@
 import streamlit as st
-from kanban_service import (
+from services.kanban_service import (
     create_kanban_card,
     create_kanban_column,
     delete_kanban_column,

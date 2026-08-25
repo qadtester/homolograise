@@ -31,13 +31,22 @@ def render_master_admin_panel():
             st.info("Nenhum usuário cadastrado.")
         else:
             for u in users:
-                with st.expander(
-                    f"👤 {u['name']} ({u['email']}) - Criado em: {u.get('created_at', '')[:10]}"
-                ):
-                    st.write(f"**ID:** `{u['id']}`")
-                    st.write(f"**Papel:** `{u.get('role', 'editor')}`")
+                # Tratamento e formatação das datas
+                created_at_raw = u.get("created_at", "")
+                created_str = created_at_raw[:10] if created_at_raw else "N/A"
 
-                    # Identifica equipes em que ele é owner
+                last_login_raw = u.get("last_login_at", "")
+                if last_login_raw:
+                    # Formata para 'AAAA-MM-DD HH:MM'
+                    last_login_str = last_login_raw.replace("T", " ")[:16]
+                else:
+                    last_login_str = "Nunca acessou"
+
+                # Expander com Nome, E-mail e Último Acesso no rótulo
+                expander_label = f"👤 {u.get('name', 'Sem nome')} ({u.get('email', 'Sem e-mail')}) Último acesso: {last_login_str}"
+                
+                with st.expander(expander_label):
+                    # Identifica equipes em que ele é owner para buscar projetos exclusivos
                     teams_owned = (
                         supabase.table("teams")
                         .select("id, name")
@@ -58,8 +67,13 @@ def render_master_admin_panel():
                         )
                         exclusive_projects = proj_res.data or []
 
+                    # Exibição dos dados organizados conforme solicitado
+                    st.write(f"**ID:** `{u['id']}`")
+                    st.write(f"📅 **Usuário criado em:** `{created_str}`")
+                    st.write(f"🎭 **Papel:** `{u.get('role', 'editor')}`")
+                    
                     st.markdown(
-                        f"**Projetos exclusivos da conta:** {len(exclusive_projects)}"
+                        f"📁 **Projetos exclusivos da conta:** {len(exclusive_projects)}"
                     )
                     if exclusive_projects:
                         for ep in exclusive_projects:
@@ -102,7 +116,6 @@ def render_master_admin_panel():
                                     "email": new_email.strip(),
                                 }
 
-                                # Atualiza a senha somente se o campo for preenchido
                                 if new_password.strip():
                                     update_payload["password"] = (
                                         new_password.strip()
@@ -136,7 +149,7 @@ def render_master_admin_panel():
                                 {"team_id": None}
                             ).eq("id", u["id"]).execute()
 
-                            # 2. Se o usuário for dono de equipes, desvincula OUTROS usuários dessas equipes
+                            # 2. Se o usuário for dono de equipes, desvincula OUTROS usuários
                             if team_ids_owned:
                                 supabase.table("users").update(
                                     {"team_id": None}

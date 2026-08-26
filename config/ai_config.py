@@ -16,26 +16,21 @@ load_dotenv()
 # ------------------------------------------------------------------------------
 FREE_MODELS = {
     "groq": [
-        "llama-3.3-70b-versatile",    # 🏆 Melhor performance geral e raciocínio
-        "llama-3.1-8b-instant",       # Ultra rápido
-        "qwen/qwen3.6-27b",
-        "openai/gpt-oss-120b",
-        "openai/gpt-oss-20b"
+        "openai/gpt-oss-120b",    # 🏆 Melhor performance geral e raciocínio
+        "openai/gpt-oss-20b",       # Ultra rápido
+        "qwen/qwen3.6-27b"
     ],
     "openrouter": [
-        "google/gemma-4-31b:free",     # 🏆 Excelente para JSON estrito e BDD
-        "google/gemma-4-26b-a4b:free",   # Excelente alternativa leve
-        "nvidia/nemotron-nano-9b-v2:free",
-        "nvidia/nemotron-3-nano-30b-a3b:free",
-        "nvidia/nemotron-3-ultra:free",
-        "poolside/laguna-s-2.1:free",
-        "nvidia/nemotron-3-super:free",
-        "cohere/north-mini-code:free",
+        "z-ai/glm-5.2:free",     # 🏆 Excelente para JSON estrito e BDD
+        "gminimax/minimax-m3:free",   # Excelente alternativa leve
         "poolside/laguna-xs-2.1:free",
-        "inclusionai/ling-3.0-tiny:free",
-        "nvidia/nemotron-3-nano-omni:free",
-        "openai/gpt-oss-20b:free",
-        "nvidia/nemotron-nano-12b-2-vl:free"
+        "thinkingmachines/inkling:free",
+        "thinkingmachines/inkling-small:free",
+        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "google/gemma-4-31b-it:free",
+        "google/gemma-4-26b-a4b-it:free",
+        "minimax/minimax-m2.7:free",
+        "liquid/lfm-2.5-2.6b:free"
     ],
     "gemini": [
         "gemini-2.0-flash",
